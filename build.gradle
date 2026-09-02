@@ -1,0 +1,2 @@
+// Root project. Nothing to configure here; the Android Gradle Plugin version
+// is pinned in settings.gradle (pluginManagement).

@@ -1,0 +1,33 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.rch.mdm.sample'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.mooney.mdm.sample'
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}
+
+dependencies {
+    implementation project(':mdmlib')
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation files('libs/hmdm-1.1.9.aar')
+}
