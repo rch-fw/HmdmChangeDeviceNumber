@@ -95,10 +95,10 @@ client.notifyConfigUpdated(token, "new_device_name");
 
 # Sample app
 
-Shows how to create a demo app who uses 2 libraries:
+Shows how to create a demo app that uses 2 libraries:
 
-**mdmlib**: the library provided by this project
-**hmdm**: the library who provides API interface with mdm agent to an user android app
+- **mdmlib**: the library provided by this project
+- **hmdm**: the library who provides API interface with mdm agent to an user android app
 
 - hmdm library is described here : https://h-mdm.com/headwind-mdm-api/
 - hmdm libray allow the interaction of an user defined app with mdm agent included
