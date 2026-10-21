@@ -8,8 +8,8 @@ public class HeadwindMdmClientTest {
 
     @Test
     public void md5UppercaseMatchesHeadwindFormat() {
-        assertEquals("B6301C9378E343CC6DE894437A9D1386",
-                HeadwindMdmClient.md5Uppercase("Chiesetta32H"));
+        assertEquals("5F4DCC3B5AA765D61D8327DEB882CF99",
+                HeadwindMdmClient.md5Uppercase("password"));
     }
 
     @Test

@@ -11,15 +11,17 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
  * Java port of {@code change_dev_number.py}.
  *
- * <p>Talks to a Headwind MDM server: authenticates (JWT), fetches a device by its
- * device number, renames it, and pushes a {@code configUpdated} notification.</p>
+ * <p>Talks to a Headwind MDM server: authenticates (JWT) and renames a device through
+ * {@code POST /rest/private/devices/rename}. The server notifies the device itself
+ * with a {@code configUpdated} push.</p>
+ *
+ * <p>The MDM user only needs the {@code rename_device} permission.</p>
  *
  * <p>All methods perform blocking network I/O and therefore must <b>not</b> be called
  * on the Android main thread. Use {@link MdmService} for a callback-based wrapper,
@@ -43,22 +45,14 @@ public class HeadwindMdmClient {
     // ------------------------------------------------------------------
 
     /**
-     * End-to-end equivalent of the script's {@code main()}: authenticate, fetch the
-     * device by {@code currentDeviceNumber}, change its number to {@code newDeviceNumber},
-     * and notify the device that its configuration changed.
+     * End-to-end equivalent of the script's {@code main()}: authenticate, then change
+     * the number of the device {@code currentDeviceNumber} to {@code newDeviceNumber}.
      *
      * @return the internal integer id of the device that was renamed
      */
     public long changeDeviceNumber(String currentDeviceNumber, String newDeviceNumber) throws MdmException {
         String token = authenticate();
-
-        JSONObject device = fetchDevice(token, currentDeviceNumber);
-        long deviceId = device.optLong("id", -1);
-
-        updateDeviceNumber(token, device, currentDeviceNumber, newDeviceNumber);
-        notifyConfigUpdated(token, newDeviceNumber);
-
-        return deviceId;
+        return renameDevice(token, currentDeviceNumber, newDeviceNumber);
     }
 
     // ------------------------------------------------------------------
@@ -108,61 +102,32 @@ public class HeadwindMdmClient {
         throw new MdmException("Authentication failed: " + data);
     }
 
-    /** Retrieves the complete device object by its current device number. */
-    public JSONObject fetchDevice(String token, String deviceNumber) throws MdmException {
-        JSONObject data = requestJsonObject(
-                "GET", "/rest/private/devices/number/" + encodePathSegment(deviceNumber), null, token);
-
-        // wrapped: {"status": "OK", "data": { ...device... }}
-        if ("OK".equals(data.optString("status")) && data.optJSONObject("data") != null) {
-            return data.optJSONObject("data");
-        }
-        // direct device object
-        if (data.has("id") || data.has("number")) {
-            return data;
-        }
-        throw new MdmException("Device '" + deviceNumber
-                + "' not found or unexpected response structure: " + data);
-    }
-
     /**
-     * Updates the device object with the new device number via PUT.
+     * Changes the number of a device via {@code POST /rest/private/devices/rename}.
+     * The server also sends the {@code configUpdated} push to the device.
      *
-     * @param device the full device object previously returned by {@link #fetchDevice}
-     *               (it is mutated in place, exactly like the Python version)
-     * @return the raw JSON response from the server
+     * @return the internal integer id of the device that was renamed
+     * @throws MdmException if the server rejects the request, e.g. with
+     *         {@code error.notfound.device}, {@code error.duplicate.device} or
+     *         {@code error.permission.denied} (see {@link MdmException#getResponseBody()})
      */
-    public JSONObject updateDeviceNumber(String token, JSONObject device,
-                                         String oldNumber, String newNumber) throws MdmException {
-        try {
-            device.put("number", newNumber);
-            device.put("oldNumber", oldNumber);
-
-            // 'info' must be sent back as a JSON string if the server returned it as an object
-            Object info = device.opt("info");
-            if (info instanceof JSONObject || info instanceof JSONArray) {
-                device.put("info", info.toString());
-            }
-        } catch (JSONException e) {
-            throw new MdmException("Failed to prepare device payload", e);
-        }
-
-        return requestJsonObject("PUT", "/rest/private/devices", device, token);
-    }
-
-    /**
-     * Sends a {@code configUpdated} push so the device reloads its configuration.
-     * Uses the <b>new</b> device number (server lookup is by {@code devices.number}).
-     */
-    public JSONObject notifyConfigUpdated(String token, String deviceNumber) throws MdmException {
+    public long renameDevice(String token, String currentNumber, String newNumber) throws MdmException {
         JSONObject body = new JSONObject();
         try {
-            body.put("messageType", "configUpdated");     // PushMessage.TYPE_CONFIG_UPDATED
-            body.put("deviceNumbers", new JSONArray().put(deviceNumber));
+            body.put("number", currentNumber);
+            body.put("newNumber", newNumber);
         } catch (JSONException e) {
-            throw new MdmException("Failed to build push payload", e);
+            throw new MdmException("Failed to build rename payload", e);
         }
-        return requestJsonObject("POST", "/rest/private/push", body, token);
+
+        JSONObject data = requestJsonObject("POST", "/rest/private/devices/rename", body, token);
+
+        // Headwind reports application errors with HTTP 200: {"status": "ERROR", "message": "error.xxx"}
+        if (!"OK".equals(data.optString("status")) || !data.has("data")) {
+            throw new MdmException("Rename of '" + currentNumber + "' to '" + newNumber + "' failed: "
+                    + data.optString("message", data.toString()), 200, data.toString());
+        }
+        return data.optLong("data", -1);
     }
 
     // ------------------------------------------------------------------
@@ -208,7 +173,7 @@ public class HeadwindMdmClient {
 
             if (status >= 400) {
                 throw new MdmException(
-                        method + " " + path + " failed with HTTP " + status,
+                        method + " " + url + " failed with HTTP " + status,
                         status, responseBody);
             }
             return responseBody;
@@ -235,14 +200,5 @@ public class HeadwindMdmClient {
             }
         }
         return sb.toString();
-    }
-
-    private static String encodePathSegment(String segment) {
-        // device numbers are simple identifiers; encode spaces / reserved chars defensively
-        try {
-            return java.net.URLEncoder.encode(segment, "UTF-8").replace("+", "%20");
-        } catch (IOException e) {
-            return segment;
-        }
     }
 }

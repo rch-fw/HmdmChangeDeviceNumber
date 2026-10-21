@@ -1,7 +1,11 @@
 # mdmlib
 
 Android library port of `change_dev_number.py`. Renames a device in a
-[Headwind MDM](https://h-mdm.com/) server and pushes a `configUpdated` notification.
+[Headwind MDM](https://h-mdm.com/) server; the server then pushes a `configUpdated`
+notification to the device.
+
+Requires a server that provides `POST /rest/private/devices/rename` (the patched
+`hmdm_server`). The MDM user only needs a role with the `rename_device` permission.
 
 ## Build
 
@@ -67,9 +71,7 @@ Or drive the individual steps:
 
 ```java
 String token = client.authenticate();
-JSONObject device = client.fetchDevice(token, "old_device_name");
-client.updateDeviceNumber(token, device, "old_device_name", "new_device_name");
-client.notifyConfigUpdated(token, "new_device_name");
+long id = client.renameDevice(token, "old_device_name", "new_device_name");
 ```
 
 ## Mapping to the Python script
@@ -78,17 +80,17 @@ client.notifyConfigUpdated(token, "new_device_name");
 |----------------------------|----------------------------------------------|
 | `get_md5_uppercase`        | `HeadwindMdmClient.md5Uppercase`             |
 | `authenticate`             | `HeadwindMdmClient.authenticate`             |
-| `fetch_device`             | `HeadwindMdmClient.fetchDevice`              |
-| `update_device_number`     | `HeadwindMdmClient.updateDeviceNumber`       |
-| `notify_config_updated`    | `HeadwindMdmClient.notifyConfigUpdated`      |
+| `rename_device`            | `HeadwindMdmClient.renameDevice`             |
 | `main`                     | `HeadwindMdmClient.changeDeviceNumber`       |
 
 ## Notes
 
-- The device object is kept as a `JSONObject` and sent back to the server intact,
-  so no fields are lost on the round-trip (same behaviour as the script).
-- `info` is re-serialised to a JSON string before the PUT when the server returns
-  it as an object/array.
+- The server changes only the device number (it keeps the original number as
+  `oldNumber` until the device syncs); groups, configuration and other fields are
+  not touched.
+- Server-side errors (`error.notfound.device`, `error.duplicate.device`,
+  `error.permission.denied`) are raised as `MdmException`; the raw server reply is
+  in `getResponseBody()`.
 - Do not hard-code credentials in production; pass them from secure storage.
 - If your server uses a self-signed certificate you must configure a
   network security config / trust manager in the host app.
