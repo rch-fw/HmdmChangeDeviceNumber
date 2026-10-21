@@ -28,6 +28,12 @@
         android:text="Change device number"
         android:visibility="gone"/>
 
+    <Button
+        android:id="@+id/secondaryDisplayButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Show dialog on secondary display" />
+
     <ProgressBar
         android:id="@+id/progress"
         style="?android:attr/progressBarStyleHorizontal"
