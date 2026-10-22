@@ -1,9 +1,10 @@
 # mdmlib changelog
 
 All notable changes to `mdmlib` are listed here, newest first.
-The library has no version number yet, so entries are identified by date and commit.
+The version is set in `mdmlib/build.gradle` and is available at runtime as
+`com.rch.mdm.BuildConfig.VERSION_NAME`.
 
-## 2026-10-21 — `ad20dd9`
+## 2.0.0 — 2026-10-21
 
 Needs a Headwind MDM server that provides `POST /rest/private/devices/rename`
 (`hmdm_server` branch `plugin-dev`, commit `8928b5e6`). Stock Headwind servers
@@ -16,8 +17,10 @@ are not supported anymore.
 - The MDM user only needs the `rename_device` permission (previously
   `edit_devices` + `push_api`, and "All devices available").
 - HTTP error messages include the full request URL.
+- `prebuilt/mdmlib-release.aar` rebuilt.
 
 ### Added
+- Version number (`BuildConfig.VERSION_NAME`).
 - `HeadwindMdmClient.renameDevice(token, currentNumber, newNumber)`, returning the device id.
 
 ### Removed (breaking)
@@ -31,14 +34,10 @@ are not supported anymore.
   `MdmException` instead of being treated as success.
 - Removed a real password from the unit tests.
 
-## 2026-10-19 — `493af4c`
+## 1.0.0 — 2026-09-02
 
-### Added
-- Prebuilt `prebuilt/mdmlib-release.aar`.
-
-## 2026-09-02 — `47a76d1`
-
-Initial release: Java port of `change_dev_number.py`.
+Initial release: Java port of `change_dev_number.py`. This version had no version
+number in the build; a prebuilt AAR of it was added on 2026-10-19.
 
 ### Added
 - `HeadwindMdmClient`: JWT login (`authenticate`, password sent as uppercase MD5),

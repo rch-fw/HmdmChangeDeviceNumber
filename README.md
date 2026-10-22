@@ -4,6 +4,9 @@ Android library port of `change_dev_number.py`. Renames a device in a
 [Headwind MDM](https://h-mdm.com/) server; the server then pushes a `configUpdated`
 notification to the device.
 
+Current version: **2.0.0** (see [`mdmlib/CHANGELOG.md`](mdmlib/CHANGELOG.md)).
+At runtime it is available as `com.rch.mdm.BuildConfig.VERSION_NAME`.
+
 Requires a server that provides `POST /rest/private/devices/rename` (the patched
 `hmdm_server`). The MDM user only needs a role with the `rename_device` permission.
 
