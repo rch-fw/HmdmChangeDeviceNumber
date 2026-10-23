@@ -17,6 +17,9 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -189,6 +192,7 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         final EditText usernameField = dialogView.findViewById(R.id.username);
         final EditText passwordField = dialogView.findViewById(R.id.password);
         final EditText deviceNumberField = dialogView.findViewById(R.id.deviceNumber);
+        final EditText groupsField = dialogView.findViewById(R.id.groups);
 
         new AlertDialog.Builder(this)
                 .setTitle("MDM credentials")
@@ -197,18 +201,35 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
                 .setPositiveButton("Connect", (dialog, which) -> {
                     String username = usernameField.getText().toString().trim();
                     String password = passwordField.getText().toString();
-                    String deviceNumber = deviceNumberField.getText().toString();
-                    if (TextUtils.isEmpty(username) || TextUtils.isEmpty(password) || TextUtils.isEmpty(deviceNumber)) {
-                        Toast.makeText(this, "Username,password and new device number are required",
+                    String deviceNumber = deviceNumberField.getText().toString().trim();
+                    List<String> groups = parseGroups(groupsField.getText().toString());
+                    if (TextUtils.isEmpty(username) || TextUtils.isEmpty(password)
+                            || (TextUtils.isEmpty(deviceNumber) && groups == null)) {
+                        Toast.makeText(this, "Username, password and a new device number or groups are required",
                                 Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    runChangeDeviceNumber(username, password,deviceNumber);
+                    runChangeDevice(username, password,
+                            TextUtils.isEmpty(deviceNumber) ? null : deviceNumber, groups);
                 })
                 .show();
     }
 
-    private void runChangeDeviceNumber(String username, String password, String deviceNumber) {
+    /** Comma-separated group names; {@code null} (groups unchanged) when the field is blank. */
+    private static List<String> parseGroups(String text) {
+        if (text.trim().isEmpty()) {
+            return null;
+        }
+        List<String> groups = new ArrayList<>();
+        for (String name : text.split(",")) {
+            if (!name.trim().isEmpty()) {
+                groups.add(name.trim());
+            }
+        }
+        return groups;
+    }
+
+    private void runChangeDevice(String username, String password, String deviceNumber, List<String> groups) {
         // A fresh service each run keeps this sample simple (credentials may change
         // between runs). shutdown() the previous one so its thread is released.
         if (mdmService != null) {
@@ -217,16 +238,17 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         mdmService = new MdmService(new MdmConfig(headwindMDM.getServerUrl(), username, password));
 
         setBusy(true);
-        log("Authenticating as \"" + username + "\" and renaming "
-                + headwindMDM.getDeviceId() + " -> " + deviceNumber + " ...");
+        log("Authenticating as \"" + username + "\" and updating " + headwindMDM.getDeviceId()
+                + (deviceNumber != null ? ": number -> " + deviceNumber : "")
+                + (groups != null ? ": groups -> " + groups : "") + " ...");
 
-        mdmService.changeDeviceNumber(headwindMDM.getDeviceId(), deviceNumber,
+        mdmService.changeDevice(headwindMDM.getDeviceId(), deviceNumber, groups,
                 new MdmService.Callback<Long>() {
                     @Override public void onSuccess(Long deviceId) {
                         setBusy(false);
-                        log("OK - device id " + deviceId
-                                + " renamed to " + deviceNumber
-                                + " and configUpdated push sent.");
+                        log("OK - device id " + deviceId + " updated"
+                                + (deviceNumber != null ? "; renamed to " + deviceNumber + " and configUpdated push sent" : "")
+                                + (groups != null ? "; groups set to " + groups : "") + ".");
                     }
 
                     @Override public void onError(@NonNull MdmException e) {

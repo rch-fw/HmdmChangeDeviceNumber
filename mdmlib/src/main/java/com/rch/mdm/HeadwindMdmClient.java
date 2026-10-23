@@ -10,16 +10,18 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
  * Java port of {@code change_dev_number.py}.
  *
- * <p>Talks to a Headwind MDM server: authenticates (JWT) and renames a device through
- * {@code POST /rest/private/devices/rename}. The server notifies the device itself
- * with a {@code configUpdated} push.</p>
+ * <p>Talks to a Headwind MDM server: authenticates (JWT) and changes the number and/or
+ * the groups of a device through {@code POST /rest/private/devices/rename}. When the
+ * number changes, the server notifies the device itself with a {@code configUpdated} push.</p>
  *
  * <p>The MDM user only needs the {@code rename_device} permission.</p>
  *
@@ -53,6 +55,22 @@ public class HeadwindMdmClient {
     public long changeDeviceNumber(String currentDeviceNumber, String newDeviceNumber) throws MdmException {
         String token = authenticate();
         return renameDevice(token, currentDeviceNumber, newDeviceNumber);
+    }
+
+    /**
+     * Authenticate, then change the number and/or the groups of the device
+     * {@code currentDeviceNumber} in a single server transaction.
+     *
+     * @param newDeviceNumber the new number, or {@code null} to keep the current one
+     * @param groups names of the groups the device must belong to, replacing all its current
+     *               groups; {@code null} keeps the current groups, an empty list removes the
+     *               device from all groups
+     * @return the internal integer id of the device that was updated
+     */
+    public long changeDevice(String currentDeviceNumber, String newDeviceNumber, List<String> groups)
+            throws MdmException {
+        String token = authenticate();
+        return updateDevice(token, currentDeviceNumber, newDeviceNumber, groups);
     }
 
     // ------------------------------------------------------------------
@@ -112,10 +130,35 @@ public class HeadwindMdmClient {
      *         {@code error.permission.denied} (see {@link MdmException#getResponseBody()})
      */
     public long renameDevice(String token, String currentNumber, String newNumber) throws MdmException {
+        return updateDevice(token, currentNumber, newNumber, null);
+    }
+
+    /**
+     * Changes the number and/or the groups of a device via
+     * {@code POST /rest/private/devices/rename}, in a single server transaction.
+     * When the number changes, the server also sends the {@code configUpdated} push.
+     *
+     * @param newNumber the new number, or {@code null} to keep the current one
+     * @param groups names of the groups the device must belong to, replacing all its current
+     *               groups; {@code null} keeps the current groups, an empty list removes the
+     *               device from all groups
+     * @return the internal integer id of the device that was updated
+     * @throws MdmException if the server rejects the request, e.g. with
+     *         {@code error.notfound.device}, {@code error.duplicate.device},
+     *         {@code error.notfound.group} or {@code error.permission.denied}
+     *         (see {@link MdmException#getResponseBody()})
+     */
+    public long updateDevice(String token, String currentNumber, String newNumber, List<String> groups)
+            throws MdmException {
         JSONObject body = new JSONObject();
         try {
             body.put("number", currentNumber);
-            body.put("newNumber", newNumber);
+            if (newNumber != null) {
+                body.put("newNumber", newNumber);
+            }
+            if (groups != null) {
+                body.put("groups", new JSONArray(groups));
+            }
         } catch (JSONException e) {
             throw new MdmException("Failed to build rename payload", e);
         }
@@ -124,8 +167,13 @@ public class HeadwindMdmClient {
 
         // Headwind reports application errors with HTTP 200: {"status": "ERROR", "message": "error.xxx"}
         if (!"OK".equals(data.optString("status")) || !data.has("data")) {
-            throw new MdmException("Rename of '" + currentNumber + "' to '" + newNumber + "' failed: "
-                    + data.optString("message", data.toString()), 200, data.toString());
+            String message = data.optString("message", data.toString());
+            if (data.has("data") && !data.isNull("data")) {
+                // e.g. the unknown group name for error.notfound.group
+                message += " (" + data.opt("data") + ")";
+            }
+            throw new MdmException("Update of device '" + currentNumber + "' failed: " + message,
+                    200, data.toString());
         }
         return data.optLong("data", -1);
     }

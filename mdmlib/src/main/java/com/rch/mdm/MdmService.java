@@ -3,6 +3,7 @@ package com.rch.mdm;
 import android.os.Handler;
 import android.os.Looper;
 
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -57,6 +58,16 @@ public class MdmService {
         run(new Task<Long>() {
             @Override public Long execute() throws MdmException {
                 return client.changeDeviceNumber(currentNumber, newNumber);
+            }
+        }, callback);
+    }
+
+    /** Async equivalent of {@link HeadwindMdmClient#changeDevice}. */
+    public void changeDevice(final String currentNumber, final String newNumber,
+                             final List<String> groups, final Callback<Long> callback) {
+        run(new Task<Long>() {
+            @Override public Long execute() throws MdmException {
+                return client.changeDevice(currentNumber, newNumber, groups);
             }
         }, callback);
     }

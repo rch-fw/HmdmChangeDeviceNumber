@@ -4,6 +4,28 @@ All notable changes to `mdmlib` are listed here, newest first.
 The version is set in `mdmlib/build.gradle` and is available at runtime as
 `com.rch.mdm.BuildConfig.VERSION_NAME`.
 
+## 2.1.0 — 2026-10-22
+
+Needs the `hmdm_server` build in which `POST /rest/private/devices/rename` accepts
+`groups` (`plugin-dev`, after `8928b5e6`). An older server silently ignores the
+groups, or fails with `error.params.missing` when no new number is given.
+
+### Added
+- Set the groups of a device, by name, together with or instead of renaming it:
+  `HeadwindMdmClient.changeDevice(currentNumber, newNumber, groups)`,
+  `HeadwindMdmClient.updateDevice(token, currentNumber, newNumber, groups)` and
+  `MdmService.changeDevice(...)`. The list replaces all current groups; `null` keeps
+  them, an empty list removes the device from all groups. `newNumber` may be `null`
+  to change only the groups. Number and groups are updated in one server transaction.
+- Unknown group names fail with `error.notfound.group`; the exception message
+  includes the name.
+- No new permission: `rename_device` also allows setting groups.
+
+### Changed
+- The `configUpdated` push is sent only when the number changes, not for a
+  groups-only update.
+- `prebuilt/mdmlib-release.aar` rebuilt.
+
 ## 2.0.0 — 2026-10-21
 
 Needs a Headwind MDM server that provides `POST /rest/private/devices/rename`

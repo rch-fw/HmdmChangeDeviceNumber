@@ -1,10 +1,10 @@
 # mdmlib
 
 Android library port of `change_dev_number.py`. Renames a device in a
-[Headwind MDM](https://h-mdm.com/) server; the server then pushes a `configUpdated`
-notification to the device.
+[Headwind MDM](https://h-mdm.com/) server and/or sets its groups; when the number
+changes, the server pushes a `configUpdated` notification to the device.
 
-Current version: **2.0.0** (see [`mdmlib/CHANGELOG.md`](mdmlib/CHANGELOG.md)).
+Current version: **2.1.0** (see [`mdmlib/CHANGELOG.md`](mdmlib/CHANGELOG.md)).
 At runtime it is available as `com.rch.mdm.BuildConfig.VERSION_NAME`.
 
 Requires a server that provides `POST /rest/private/devices/rename` (the patched
@@ -77,22 +77,38 @@ String token = client.authenticate();
 long id = client.renameDevice(token, "old_device_name", "new_device_name");
 ```
 
+### Setting groups
+
+Pass group names (as shown in the web panel). The list replaces all current groups
+of the device; `null` keeps them, an empty list removes the device from all groups.
+`newNumber` may be `null` to change only the groups.
+
+```java
+// rename and set groups in one server transaction
+client.changeDevice("old_device_name", "new_device_name", Arrays.asList("Shop A", "Kiosk"));
+
+// only set groups
+client.changeDevice("device_name", null, Arrays.asList("Shop A"));
+```
+
+`MdmService.changeDevice(...)` is the async equivalent.
+
 ## Mapping to the Python script
 
 | Python function            | Java equivalent                              |
 |----------------------------|----------------------------------------------|
 | `get_md5_uppercase`        | `HeadwindMdmClient.md5Uppercase`             |
 | `authenticate`             | `HeadwindMdmClient.authenticate`             |
-| `rename_device`            | `HeadwindMdmClient.renameDevice`             |
-| `main`                     | `HeadwindMdmClient.changeDeviceNumber`       |
+| `rename_device`            | `HeadwindMdmClient.updateDevice`             |
+| `main`                     | `HeadwindMdmClient.changeDevice`             |
 
 ## Notes
 
 - The server changes only the device number (it keeps the original number as
-  `oldNumber` until the device syncs); groups, configuration and other fields are
-  not touched.
+  `oldNumber` until the device syncs) and, if given, the groups; configuration and
+  other fields are not touched.
 - Server-side errors (`error.notfound.device`, `error.duplicate.device`,
-  `error.permission.denied`) are raised as `MdmException`; the raw server reply is
+  `error.notfound.group`, `error.permission.denied`) are raised as `MdmException`; the raw server reply is
   in `getResponseBody()`.
 - Do not hard-code credentials in production; pass them from secure storage.
 - If your server uses a self-signed certificate you must configure a

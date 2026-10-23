@@ -7,7 +7,9 @@ USERNAME = "user"
 PASSWORD = "pwd"
 
 CURRENT_DEVICE_NUMBER = "devname_old"
-NEW_DEVICE_NUMBER = "devname_new"
+NEW_DEVICE_NUMBER = "devname_new"      # None to keep the current number
+# Group names replacing all current groups; None keeps them, [] removes all
+NEW_GROUPS = None
 
 
 def get_md5_uppercase(password: str) -> str:
@@ -39,18 +41,26 @@ def authenticate(base_url: str, username: str, password: str) -> str:
     raise ValueError(f"Authentication failed: {data}")
 
 
-def rename_device(base_url: str, token: str, old_number: str, new_number: str) -> int:
-    """Renames the device; the server also sends the configUpdated push. Returns the device id."""
+def rename_device(base_url: str, token: str, old_number: str, new_number=None, groups=None) -> int:
+    """Renames the device and/or replaces its groups (by name) in one transaction.
+
+    The server sends the configUpdated push when the number changes. Returns the device id.
+    """
     url = f"{base_url.rstrip('/')}/rest/private/devices/rename"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    body = {"number": old_number, "newNumber": new_number}
+    body = {"number": old_number}
+    if new_number is not None:
+        body["newNumber"] = new_number
+    if groups is not None:
+        body["groups"] = groups
     r = requests.post(url, json=body, headers=headers, timeout=15)
     r.raise_for_status()
 
     data = r.json()
     # Headwind reports application errors with HTTP 200: {"status": "ERROR", "message": "error.xxx"}
     if data.get("status") != "OK":
-        raise ValueError(f"Rename failed: {data.get('message', data)}")
+        detail = f" ({data['data']})" if data.get("data") is not None else ""
+        raise ValueError(f"Update failed: {data.get('message', data)}{detail}")
     return data["data"]
 
 
@@ -60,9 +70,9 @@ def main():
         token = authenticate(BASE_URL, USERNAME, PASSWORD)
         print("Authentication successful.")
 
-        print(f"Renaming device '{CURRENT_DEVICE_NUMBER}' to '{NEW_DEVICE_NUMBER}'...")
-        device_id = rename_device(BASE_URL, token, CURRENT_DEVICE_NUMBER, NEW_DEVICE_NUMBER)
-        print(f"Device (ID: {device_id}) renamed and notified successfully!")
+        print(f"Updating device '{CURRENT_DEVICE_NUMBER}': number -> {NEW_DEVICE_NUMBER}, groups -> {NEW_GROUPS}...")
+        device_id = rename_device(BASE_URL, token, CURRENT_DEVICE_NUMBER, NEW_DEVICE_NUMBER, NEW_GROUPS)
+        print(f"Device (ID: {device_id}) updated successfully!")
 
     except requests.exceptions.HTTPError as http_err:
         print(f"HTTP error occurred: {http_err} - {http_err.response.text}")
