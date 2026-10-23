@@ -91,6 +91,9 @@ client.changeDevice("old_device_name", "new_device_name", Arrays.asList("Shop A"
 client.changeDevice("device_name", null, Arrays.asList("Shop A"));
 ```
 
+To release app updates one area at a time using these groups, see the MDM operator
+guide [Staged configuration rollout by area](docs/staged-rollout-by-area.md).
+
 `MdmService.changeDevice(...)` is the async equivalent.
 
 ## Mapping to the Python script
