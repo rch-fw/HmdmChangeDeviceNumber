@@ -6,7 +6,7 @@ How a kiosk app waits for the Headwind MDM launcher to finish its app updates be
 
 When the launcher installs a new version of an app, or removes it, Android kills the app's process. If that happens in the middle of a payment, the payment is lost.
 
-So the launcher installs and removes apps **only during the startup update**: the first configuration update after the device boots. Configuration updates later in the day (push, the periodic check, the update button, plugin calls) apply everything else (settings, policies, files, remote commands) but leave app installs and removals for the next boot.
+So the launcher installs and removes apps **only during the startup update**: the first configuration update after the device boots. Configuration updates later in the day (push, the periodic check, the update button, plugin calls) apply everything else (settings, policies, files, remote commands) but leave app installs and removals for the next boot. This is on by default and can be turned off per configuration (see [Configuration option](#configuration-option)).
 
 At boot the kiosk app may already be running while the launcher installs updates (the launcher starts the kiosk app as soon as it starts). The kiosk app therefore asks the launcher whether the startup update is over and waits until it is: the **startup gate**. While it waits it is idle, so if the launcher replaces it, nothing is lost.
 
@@ -32,7 +32,7 @@ What the launcher guarantees:
 
 - **The gate always opens.** The launcher reports the end of the startup update when the apps are updated, when the configuration can't be loaded (server or network error), or after **3 minutes**. At the timeout, an app download or installation already running gets up to 20 more seconds to finish; the app updates not started yet are left for the next boot, and nothing is installed or removed after the gate opens.
 - **Once per boot.** After the startup update, `awaitStartupUpdate` answers "over" until the next boot, even if the launcher restarts (crash, or the launcher updating itself).
-- **No app changes during the day.** Outside the startup update, the launcher doesn't install or remove apps, so a running app is never killed by an update.
+- **No app changes during the day** (unless turned off in the configuration). Outside the startup update, the launcher doesn't install or remove apps, so a running app is never killed by an update.
 
 The library adds its own timeout of **3 minutes 30 seconds** as a safety net, for example when the launcher doesn't answer at all. It is longer than the launcher's, so normally the launcher decides.
 
@@ -133,9 +133,21 @@ boolean over = MDMService.getInstance().awaitStartupUpdate(configUpdateListener)
 
 The app must then handle the timeout and reconnections itself (the launcher restarts when it updates itself, and the registered listener is lost).
 
+## Configuration option
+
+Whether app changes wait for the next boot is a configuration setting, sent by the server in the configuration JSON:
+
+| Key | Values | Default |
+|---|---|---|
+| `appUpdateAtStartupOnly` | `true`: app installs and removals only during the startup update. `false`: also during the day, right after a configuration update (the app may be killed while in use). | `true` when the key is missing |
+
+The current server doesn't send this key yet, so all devices use the default (`true`). To make it editable, the server needs a field in the configuration (for example a checkbox "Install app updates only at device startup", checked by default) sent as `appUpdateAtStartupOnly` in the device configuration.
+
+With either value, the startup update and the startup gate work the same way: the gate is still needed, because the startup update installs apps right after boot.
+
 ## Operator notes
 
-- In the configuration, app updates are released as usual (new version, action **Install**). Devices install them **at the next boot**, not when the configuration is saved. To apply an update right away, reboot the device (from the web panel or by hand).
+- In the configuration, app updates are released as usual (new version, action **Install**). With the default setting, devices install them **at the next boot**, not when the configuration is saved. To apply an update right away, reboot the device (from the web panel or by hand).
 - The configuration's app update time window and "WiFi only" option still apply to the startup update. If a device boots outside the window, its app updates wait for the next boot within the window.
 - The launcher writes `N app update(s) deferred to the next boot` in the device log when a configuration update during the day skips app changes.
 
@@ -147,7 +159,7 @@ Device connected with `adb`. Launcher log: `adb logcat -s HeadwindMDM`.
 |---|---|---|
 | Update pending at boot | Release a new version of the kiosk app in the configuration, then `adb reboot`. | The app shows the wait screen, the launcher installs the new version, the new version starts and opens the gate (`STARTUP_READY`). |
 | Nothing to update | `adb reboot` with no change in the configuration. | The gate opens within a few seconds. |
-| Update during the day | Release a new version without rebooting. | The running app isn't killed; the log shows `app update(s) deferred to the next boot`; the update is installed at the next reboot. |
+| Update during the day | Release a new version without rebooting (default setting). | The running app isn't killed; the log shows `app update(s) deferred to the next boot`; the update is installed at the next reboot. |
 | No network at boot | Disable WiFi / mobile data, `adb reboot`. | The gate opens after the launcher gives up loading the configuration (at the latest after 3 minutes). |
 | App restart | Close and reopen the app during the day. | The gate opens immediately. |
 | Old launcher | Install a launcher with API version below 120. | The gate opens immediately (`STARTUP_READY`). |
