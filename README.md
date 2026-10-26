@@ -127,3 +127,7 @@ Shows how to create a demo app that uses 2 libraries:
 - hmdm library is described here : https://h-mdm.com/headwind-mdm-api/
 - hmdm libray allow the interaction of an user defined app with mdm agent included
   retrieval of mdm related info like **device Id** and **mdm server url**.
+
+The sample app also shows the **startup gate** (hmdm library 1.2.0): after boot it waits
+until the MDM launcher has installed the app updates before enabling its buttons, because
+installing an app kills it. See [Startup sync with the MDM launcher](docs/startup-sync.md).

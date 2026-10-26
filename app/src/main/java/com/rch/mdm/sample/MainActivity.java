@@ -62,6 +62,13 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
     boolean hmdmConnected =false;
 
+    /** False until the launcher startup update is over (startup gate). */
+    boolean startupReady = false;
+
+    private View startupPanel;
+    private TextView startupStatus;
+    private ProgressBar startupProgress;
+
 
 
     @Override
@@ -77,6 +84,10 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             if (!headwindMDM.connect(this, MainActivity.this)) {
             }
         }
+
+        startupPanel = findViewById(R.id.startupPanel);
+        startupStatus = findViewById(R.id.startupStatus);
+        startupProgress = findViewById(R.id.startupProgress);
 
 
 
@@ -104,6 +115,8 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             }
         });
 
+        // Last: onReady() may be called right away and uses the views above
+        awaitStartupUpdate();
     }
 
     @Override
@@ -119,6 +132,68 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             mdmService.shutdown();
         }
         super.onDestroy();
+    }
+
+    // ------------------------------------------------------------------
+
+    /**
+     * Startup gate. After boot the launcher installs the app updates, and installing an app
+     * kills it. So until onReady() the app must not start anything which must not be
+     * interrupted (here: the buttons stay hidden).
+     */
+    private void awaitStartupUpdate() {
+        headwindMDM.awaitStartupUpdate(new HeadwindMDM.StartupGateListener() {
+            @Override public void onWaiting() {
+                log("Startup gate: the launcher is updating apps, waiting");
+                startupStatus.setText("Waiting for the app updates...");
+            }
+
+            @Override public void onAppRemoving(String pkg, String name) {
+                log("Startup gate: removing " + pkg);
+                startupStatus.setText("Removing " + name);
+            }
+
+            @Override public void onAppDownloading(String pkg, String name) {
+                log("Startup gate: downloading " + pkg);
+                startupStatus.setText("Downloading " + name);
+            }
+
+            @Override public void onAppInstalling(String pkg, String name) {
+                log("Startup gate: installing " + pkg);
+                startupStatus.setText("Installing " + name);
+            }
+
+            @Override public void onDownloadProgress(int progress, long total, long current) {
+                startupProgress.setIndeterminate(false);
+                startupProgress.setProgress(progress);
+            }
+
+            @Override public void onReady(int reason) {
+                switch (reason) {
+                    case HeadwindMDM.STARTUP_READY:
+                        log("Startup gate: open, startup update over");
+                        break;
+                    case HeadwindMDM.STARTUP_TIMEOUT:
+                        log("Startup gate: open, no answer from the launcher (timeout)");
+                        break;
+                    case HeadwindMDM.STARTUP_NO_MDM:
+                        log("Startup gate: open, MDM agent not available");
+                        break;
+                }
+                startupReady = true;
+                startupPanel.setVisibility(View.GONE);
+                updateButtons();
+            }
+        });
+    }
+
+    private void updateButtons() {
+        int visibility = startupReady ? VISIBLE : View.GONE;
+        secondaryDisplayButton.setVisibility(visibility);
+        // These buttons also need the MDM agent
+        visibility = startupReady && hmdmConnected ? VISIBLE : View.GONE;
+        changeButton.setVisibility(visibility);
+        getButton.setVisibility(visibility);
     }
 
     // ------------------------------------------------------------------
@@ -280,9 +355,8 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
     @Override
     public void onHeadwindMDMConnected() {
-        changeButton.setVisibility(VISIBLE);
-        getButton.setVisibility(VISIBLE);
         hmdmConnected=true;
+        updateButtons();
         runOnUiThread(new Runnable() {
             @Override
             public void run() {

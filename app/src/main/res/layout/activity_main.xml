@@ -12,6 +12,34 @@
         android:textIsSelectable="true"
         android:paddingBottom="12dp" />
 
+    <!-- Shown until the launcher startup update is over (startup gate) -->
+    <LinearLayout
+        android:id="@+id/startupPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="12dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Device updating, please wait"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/startupStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Connecting to the MDM agent..." />
+
+        <ProgressBar
+            android:id="@+id/startupProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:indeterminate="true" />
+    </LinearLayout>
+
 
     <Button
         android:id="@+id/getButton"
@@ -32,7 +60,8 @@
         android:id="@+id/secondaryDisplayButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Show dialog on secondary display" />
+        android:text="Show dialog on secondary display"
+        android:visibility="gone" />
 
     <ProgressBar
         android:id="@+id/progress"
