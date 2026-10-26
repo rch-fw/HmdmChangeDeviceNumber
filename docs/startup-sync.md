@@ -151,6 +151,22 @@ With either value, the startup update and the startup gate work the same way: th
 - The configuration's app update time window and "WiFi only" option still apply to the startup update. If a device boots outside the window, its app updates wait for the next boot within the window.
 - The launcher writes `N app update(s) deferred to the next boot` in the device log when a configuration update during the day skips app changes.
 
+## Rebooting from the app
+
+An app can choose when the deferred app updates are installed by asking the launcher to reboot the device at a quiet moment, for example after closing the day's transactions:
+
+```java
+headwindMDM.setApiKey(apiKey);              // before connect(); the launcher's LIBRARY_API_KEY
+// ... once connected and the startup gate is open:
+boolean accepted = headwindMDM.sendPush("reboot", null);
+```
+
+- The API key must match `LIBRARY_API_KEY` of the launcher build. Anyone with the key can reboot the device: don't commit it, load it from a protected place (the sample app reads it from `local.properties`).
+- The launcher reboots only in device owner mode. `true` means only that the message was accepted.
+- After the reboot, the startup update installs the pending app updates and the startup gate holds the app until they're done.
+
+The sample app's **Reboot device** button shows it (`confirmReboot()` / `reboot()` in `MainActivity`).
+
 ## Testing
 
 Device connected with `adb`. Launcher log: `adb logcat -s HeadwindMDM`.

@@ -63,6 +63,13 @@
         android:text="Show dialog on secondary display"
         android:visibility="gone" />
 
+    <Button
+        android:id="@+id/rebootButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Reboot device"
+        android:visibility="gone" />
+
     <ProgressBar
         android:id="@+id/progress"
         style="?android:attr/progressBarStyleHorizontal"

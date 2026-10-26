@@ -131,3 +131,23 @@ Shows how to create a demo app that uses 2 libraries:
 The sample app also shows the **startup gate** (hmdm library 1.2.0): after boot it waits
 until the MDM launcher has installed the app updates before enabling its buttons, because
 installing an app kills it. See [Startup sync with the MDM launcher](docs/startup-sync.md).
+
+### Reboot button
+
+The **Reboot device** button asks the MDM launcher to reboot the device, so the app updates
+waiting for the next boot are installed. It sends a `reboot` push message through the hmdm
+library (`HeadwindMDM.sendPush("reboot", null)`), which requires:
+
+- the launcher's library API key (`LIBRARY_API_KEY` in the launcher build). It is not stored
+  in this repository: add it to `local.properties` (not committed) before building:
+
+  ```properties
+  hmdm.apiKey=<LIBRARY_API_KEY of the launcher build>
+  ```
+
+  The build exposes it as `BuildConfig.HMDM_API_KEY`. Without it the app still builds, and the
+  button only logs an error.
+- the launcher in device owner mode: otherwise it accepts the message but doesn't reboot.
+
+`sendPush` returning `true` means only that the launcher accepted the message; the reboot
+runs in the background. Unlike a reboot from the web panel, it isn't recorded on the server.

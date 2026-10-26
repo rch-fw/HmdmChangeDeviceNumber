@@ -49,6 +49,8 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
     private Button secondaryDisplayButton;
 
+    private Button rebootButton;
+
     /** Dialog currently shown on the secondary display, if any. */
     private Presentation secondaryDialog;
 
@@ -79,6 +81,10 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         deviceInfo = findViewById(R.id.deviceInfo);
 
         headwindMDM= HeadwindMDM.getInstance();
+        // Before connect(): the key is also used to query the privileged configuration
+        if (!BuildConfig.HMDM_API_KEY.isEmpty()) {
+            headwindMDM.setApiKey(BuildConfig.HMDM_API_KEY);
+        }
 
         if (!headwindMDM.isConnected()) {
             if (!headwindMDM.connect(this, MainActivity.this)) {
@@ -112,6 +118,13 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         secondaryDisplayButton.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 toggleSecondaryDialog();
+            }
+        });
+
+        rebootButton = findViewById(R.id.rebootButton);
+        rebootButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                confirmReboot();
             }
         });
 
@@ -194,6 +207,36 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         visibility = startupReady && hmdmConnected ? VISIBLE : View.GONE;
         changeButton.setVisibility(visibility);
         getButton.setVisibility(visibility);
+        rebootButton.setVisibility(visibility);
+    }
+
+    // ------------------------------------------------------------------
+
+    private void confirmReboot() {
+        new AlertDialog.Builder(this)
+                .setTitle("Reboot device")
+                .setMessage("Reboot the device now? App updates waiting for the next boot are installed at startup.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Reboot", (dialog, which) -> reboot())
+                .show();
+    }
+
+    /**
+     * Asks the launcher to reboot through a "reboot" push message. The launcher reboots only
+     * if it is device owner; true here means only that the message was accepted (API key ok).
+     */
+    private void reboot() {
+        if (BuildConfig.HMDM_API_KEY.isEmpty()) {
+            log("FAILED to request reboot: no API key, set hmdm.apiKey in local.properties");
+            return;
+        }
+        log("Requesting reboot...");
+        if (headwindMDM.sendPush("reboot", null)) {
+            log("Reboot requested");
+        } else {
+            log("FAILED to request reboot: MDM agent not connected or wrong API key (error "
+                    + headwindMDM.getMdmAgentError() + ")");
+        }
     }
 
     // ------------------------------------------------------------------

@@ -2,6 +2,16 @@ plugins {
     id 'com.android.application'
 }
 
+// Value from local.properties (not in the repository), empty if missing
+def localProperty(String key) {
+    def props = new Properties()
+    def file = rootProject.file('local.properties')
+    if (file.exists()) {
+        file.withInputStream { props.load(it) }
+    }
+    return props.getProperty(key, '')
+}
+
 android {
     namespace 'com.rch.mdm.sample'
     compileSdk 34
@@ -12,6 +22,14 @@ android {
         targetSdk 34
         versionCode 1
         versionName '1.0'
+
+        // MDM launcher library API key (LIBRARY_API_KEY of the launcher build), needed by
+        // HeadwindMDM.sendPush(). Kept out of the repository: set hmdm.apiKey in local.properties.
+        buildConfigField 'String', 'HMDM_API_KEY', "\"${localProperty('hmdm.apiKey')}\""
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     compileOptions {
