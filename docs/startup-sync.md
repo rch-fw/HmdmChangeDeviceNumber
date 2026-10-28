@@ -135,21 +135,24 @@ The app must then handle the timeout and reconnections itself (the launcher rest
 
 ## Configuration option
 
-Whether app changes wait for the next boot is a configuration setting, sent by the server in the configuration JSON:
+Whether app changes wait for the next boot is set per configuration in the web panel: **Configurations → (configuration) → Common settings → Install app updates only at device startup**, right below "Schedule app update" / "App update time".
 
-| Key | Values | Default |
-|---|---|---|
-| `appUpdateAtStartupOnly` | `true`: app installs and removals only during the startup update. `false`: also during the day, right after a configuration update (the app may be killed while in use). | `true` when the key is missing |
+| Checkbox | Behaviour |
+|---|---|
+| Checked (default) | Apps are installed and removed only during the startup update. Configuration updates during the day leave app changes for the next boot. |
+| Unchecked | Apps are also installed and removed during the day, right after a configuration update, as in the standard Headwind MDM. The app may be killed while in use. |
 
-The current server doesn't send this key yet, so all devices use the default (`true`). To make it editable, the server needs a field in the configuration (for example a checkbox "Install app updates only at device startup", checked by default) sent as `appUpdateAtStartupOnly` in the device configuration.
+The checkbox is checked for existing configurations and for new ones. Changing it reaches the devices with the next configuration update, like any other setting.
+
+The server sends it to the device in the configuration JSON as `appUpdateAtStartupOnly` (`true` / `false`). The checkbox needs server version **5.40.3-rch.1.1.0** or later; with an older server the key is missing and the launcher uses its default (`true`).
 
 With either value, the startup update and the startup gate work the same way: the gate is still needed, because the startup update installs apps right after boot.
 
 ## Operator notes
 
-- In the configuration, app updates are released as usual (new version, action **Install**). With the default setting, devices install them **at the next boot**, not when the configuration is saved. To apply an update right away, reboot the device (from the web panel or by hand).
+- In the configuration, app updates are released as usual (new version, action **Install**). With the default setting, devices install them **at the next boot**, not when the configuration is saved. To apply an update right away, reboot the device (from the web panel or by hand), or uncheck **Install app updates only at device startup** in the configuration.
 - The configuration's app update time window and "WiFi only" option still apply to the startup update. If a device boots outside the window, its app updates wait for the next boot within the window.
-- The launcher writes `N app update(s) deferred to the next boot` in the device log when a configuration update during the day skips app changes.
+- The launcher writes `N app update(s) deferred to the next boot` in the device log when a configuration update during the day skips app changes. A configuration update which runs while the startup update is still installing apps writes `N app update(s) left to the startup update in progress` to logcat instead (launcher 6.45 or later): those updates are installed by the startup update, not deferred.
 
 ## Rebooting from the app
 
@@ -176,6 +179,7 @@ Device connected with `adb`. Launcher and sample app log together (the sample's 
 | Update pending at boot | Release a new version of the kiosk app in the configuration, then `adb reboot`. | The app shows the wait screen, the launcher installs the new version, the new version starts and opens the gate (`STARTUP_READY`). |
 | Nothing to update | `adb reboot` with no change in the configuration. | The gate opens within a few seconds. |
 | Update during the day | Release a new version without rebooting (default setting). | The running app isn't killed; the log shows `app update(s) deferred to the next boot`; the update is installed at the next reboot. |
+| Option turned off | Uncheck **Install app updates only at device startup**, save, then release a new version. | The update is installed right away, without a reboot (the running app is killed). |
 | No network at boot | Disable WiFi / mobile data, `adb reboot`. | The gate opens after the launcher gives up loading the configuration (at the latest after 3 minutes). |
 | App restart | Close and reopen the app during the day. | The gate opens immediately. |
 | Old launcher | Install a launcher with API version below 120. | The gate opens immediately (`STARTUP_READY`). |
