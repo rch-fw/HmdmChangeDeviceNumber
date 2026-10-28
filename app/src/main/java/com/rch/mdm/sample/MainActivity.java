@@ -8,6 +8,7 @@ import android.hardware.display.DisplayManager;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.text.format.DateFormat;
+import android.util.Log;
 import android.view.Display;
 import android.view.View;
 import android.view.WindowManager;
@@ -37,6 +38,8 @@ import com.rch.mdm.MdmService;
  * for at runtime, through a dialog.</p>
  */
 public class MainActivity extends AppCompatActivity implements HeadwindMDM.EventHandler{
+
+    private static final String TAG = "MooneySample";
 
     // --- Hard-coded configuration (from change_dev_number.py) ---
    
@@ -394,6 +397,8 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         String stamp = DateFormat.format("HH:mm:ss", System.currentTimeMillis()).toString();
         String line = "[" + stamp + "] " + message + "\n";
         logView.append(line);
+        // Also to logcat, to follow the startup gate together with the launcher log
+        Log.i(TAG, message);
     }
 
     @Override

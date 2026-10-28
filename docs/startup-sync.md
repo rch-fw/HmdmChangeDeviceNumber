@@ -169,7 +169,7 @@ The sample app's **Reboot device** button shows it (`confirmReboot()` / `reboot(
 
 ## Testing
 
-Device connected with `adb`. Launcher log: `adb logcat -s HeadwindMDM`.
+Device connected with `adb`. Launcher and sample app log together (the sample's on-screen log is also written to logcat with the tag `MooneySample`): `adb logcat -s HeadwindMDM MooneySample`.
 
 | Test | Steps | Expected |
 |---|---|---|
