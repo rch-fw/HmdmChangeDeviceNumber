@@ -3,6 +3,7 @@ package com.rch.mdm.sample;
 import static android.view.View.VISIBLE;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -12,6 +13,8 @@ import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -69,6 +72,10 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     // stopped (force-stopped or never run), checked before connecting because binding to its
     // service clears the stopped state, or not configured (never started its main activity)
     private Button startLauncherButton;
+    /** Whether startLauncher() brings this app back to the front (saved in the preferences). */
+    private CheckBox returnFromLauncherCheck;
+    private static final String PREFS = "sample";
+    private static final String PREF_RETURN_FROM_LAUNCHER = "returnFromLauncher";
     private boolean launcherStopped = false;
     private boolean launcherNotConfigured = false;
     private boolean launcherStarted = false;
@@ -132,6 +139,14 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
                 startLauncher();
             }
         });
+        final SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        returnFromLauncherCheck = findViewById(R.id.returnFromLauncherCheck);
+        returnFromLauncherCheck.setChecked(prefs.getBoolean(PREF_RETURN_FROM_LAUNCHER, true));
+        returnFromLauncherCheck.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override public void onCheckedChanged(CompoundButton button, boolean checked) {
+                prefs.edit().putBoolean(PREF_RETURN_FROM_LAUNCHER, checked).apply();
+            }
+        });
         updateStartLauncherButton();
 
         rebootButton = findViewById(R.id.rebootButton);
@@ -161,9 +176,11 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             // the background. Bring this activity back to the front: allowed from the
             // background because LauncherStarterActivity has just finished.
             returnFromLauncher = false;
-            startActivity(new Intent(this, MainActivity.class)
-                    .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
-            log("Back to the foreground after starting the launcher");
+            if (returnFromLauncherCheck.isChecked()) {
+                startActivity(new Intent(this, MainActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
+                log("Back to the foreground after starting the launcher");
+            }
             launcherStarted = true;
             updateStartLauncherButton();
         }
@@ -283,7 +300,9 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
     private void updateStartLauncherButton() {
         boolean notRunning = launcherStopped || launcherNotConfigured;
-        startLauncherButton.setVisibility(notRunning && !launcherStarted ? VISIBLE : View.GONE);
+        int visibility = notRunning && !launcherStarted ? VISIBLE : View.GONE;
+        startLauncherButton.setVisibility(visibility);
+        returnFromLauncherCheck.setVisibility(visibility);
     }
 
     private Intent launcherIntent(String pkg) {

@@ -50,6 +50,15 @@
         android:text="Start MDM launcher"
         android:visibility="gone" />
 
+    <!-- Shown with startLauncherButton; the choice is saved in the preferences -->
+    <CheckBox
+        android:id="@+id/returnFromLauncherCheck"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Come back here after starting the launcher"
+        android:checked="true"
+        android:visibility="gone" />
+
     <Button
         android:id="@+id/getButton"
         android:layout_width="match_parent"

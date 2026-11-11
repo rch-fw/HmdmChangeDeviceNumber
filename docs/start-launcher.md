@@ -25,11 +25,15 @@ Tested on the EX6000:
 | Sample app reopened, launcher running and configured | hidden |
 | Launcher force-stopped (`adb shell am force-stop`), sample app reopened | shown; after pressing it, hidden (`stopped=false`) |
 
+## Optional
+
+The **Come back here after starting the launcher** checkbox, shown below the button, turns the return to the front on and off. It is checked by default and saved in the app's preferences (`returnFromLauncher`), so the choice is kept when the app restarts. Unchecked, the launcher stays in front after it starts, and the user goes back to the sample app through the Home screen.
+
 ## How it works
 
 Two pieces:
 
-1. **Come back at the right moment.** When the launcher's activity comes up, Android calls the launcher's `onResume()` first and only then the sample `MainActivity`'s `onStop()`. By the time `onStop()` runs, the launcher has already started its enrollment and configuration update, and they go on in the background. So, if the button set a flag, `onStop()` brings the sample app back:
+1. **Come back at the right moment.** When the launcher's activity comes up, Android calls the launcher's `onResume()` first and only then the sample `MainActivity`'s `onStop()`. By the time `onStop()` runs, the launcher has already started its enrollment and configuration update, and they go on in the background. So, if the button set a flag and the checkbox is checked, `onStop()` brings the sample app back:
 
    ```java
    startActivity(new Intent(this, MainActivity.class)
@@ -86,6 +90,7 @@ The launcher's screen is never really seen, and it finishes its update in the ba
 
 ## Code
 
-- `app/src/main/java/com/rch/mdm/sample/MainActivity.java`: `startLauncher()`, `launcherIntent()`, `onStop()`, `onResume()`, `isLauncherStopped()`, `updateStartLauncherButton()`
+- `app/src/main/java/com/rch/mdm/sample/MainActivity.java`: `startLauncher()`, `launcherIntent()`, `onStop()`, `onResume()`, `isLauncherStopped()`, `updateStartLauncherButton()`, `returnFromLauncherCheck`
 - `app/src/main/java/com/rch/mdm/sample/LauncherStarterActivity.java`
+- `app/src/main/res/layout/activity_main.xml`: `startLauncherButton`, `returnFromLauncherCheck`
 - `app/src/main/AndroidManifest.xml`: the `LauncherStarterActivity` declaration and the `<queries>` for the launcher packages

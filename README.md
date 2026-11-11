@@ -183,6 +183,9 @@ Notes:
   enrollment and configuration update go on in the background. See
   [Starting the MDM launcher and staying in front](docs/start-launcher.md) for how it works and
   its limits (tested on Android 10; on Android 14+ the launcher may stay in front).
+  This is optional: uncheck **Come back here after starting the launcher**, shown below the button,
+  to leave the launcher in front. The choice is saved and kept when the app restarts (checked by
+  default).
 - If the launcher was not configured yet, the sample app shows "MDM launcher not configured yet":
   once the launcher is enrolled, press **Get device number** to reconnect to the MDM agent and read
   the server and device number.
