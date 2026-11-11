@@ -176,13 +176,10 @@ Notes:
 
 - The button is always visible: it doesn't wait for the startup gate, which can't open while
   the launcher is stopped (it only times out).
-- The sample app stays in front: the launcher's activity shows at most for a moment. The app
-  brings itself back in `onStop()`, which runs after the launcher's `onResume()`, when the
-  launcher has already started its enrollment and configuration update (they go on in the
-  background). Android 10+ lets a background app start an activity only within 10 seconds after
-  one of its activities was started or finished, so the button starts the launcher from a short,
-  invisible activity (`LauncherStarterActivity`) which finishes at once. Tested on Android 10;
-  Android 14+ restricts background activity starts further, so there the launcher may stay in front.
+- The sample app stays in front: the launcher's activity shows at most for a moment, and its
+  enrollment and configuration update go on in the background. See
+  [Starting the MDM launcher and staying in front](docs/start-launcher.md) for how it works and
+  its limits (tested on Android 10; on Android 14+ the launcher may stay in front).
 - If the launcher was not configured yet, the sample app shows "MDM launcher not configured yet":
   once the launcher is enrolled, press **Get device number** to reconnect to the MDM agent and read
   the server and device number.
