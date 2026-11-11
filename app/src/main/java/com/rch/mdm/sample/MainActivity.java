@@ -224,37 +224,51 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
     // ------------------------------------------------------------------
 
-    private static final String LAUNCHER_PACKAGE = "com.hmdm.launcher.ingenico";
+    /** MDM launcher packages, in the order the hmdm library tries them: standard, Ingenico flavor. */
+    private static final String[] LAUNCHER_PACKAGES = {
+            "com.hmdm.launcher", "com.hmdm.launcher.ingenico" };
 
     /**
-     * Starts the MDM launcher with an explicit intent to one of its activities. Starting a
-     * component explicitly takes a force-stopped app out of the stopped state (broadcasts
-     * are not delivered to a stopped app), so the launcher restarts its services.
+     * Starts the MDM launcher (whichever of {@link #LAUNCHER_PACKAGES} is installed) with an
+     * explicit intent to one of its activities. Starting a component explicitly takes a
+     * force-stopped app out of the stopped state (broadcasts are not delivered to a stopped
+     * app), so the launcher restarts its services.
      */
     private void startLauncher() {
-        Intent intent = getPackageManager().getLaunchIntentForPackage(LAUNCHER_PACKAGE);
-        if (intent == null) {
-            // The launcher may declare only a HOME activity, without the LAUNCHER category
-            Intent home = new Intent(Intent.ACTION_MAIN)
-                    .addCategory(Intent.CATEGORY_HOME)
-                    .setPackage(LAUNCHER_PACKAGE);
-            List<ResolveInfo> activities = getPackageManager().queryIntentActivities(home, 0);
-            if (!activities.isEmpty()) {
-                ResolveInfo info = activities.get(0);
-                intent = home.setClassName(info.activityInfo.packageName, info.activityInfo.name);
+        for (String pkg : LAUNCHER_PACKAGES) {
+            Intent intent = launcherIntent(pkg);
+            if (intent == null) {
+                continue;
             }
-        }
-        if (intent == null) {
-            log("FAILED to start " + LAUNCHER_PACKAGE + ": not installed or no activity to start");
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                startActivity(intent);
+                log("Started " + intent.getComponent());
+            } catch (ActivityNotFoundException | SecurityException e) {
+                log("FAILED to start " + pkg + ": " + e);
+            }
             return;
         }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            startActivity(intent);
-            log("Started " + intent.getComponent());
-        } catch (ActivityNotFoundException | SecurityException e) {
-            log("FAILED to start " + LAUNCHER_PACKAGE + ": " + e);
+        log("FAILED to start the MDM launcher: none of " + TextUtils.join(", ", LAUNCHER_PACKAGES)
+                + " is installed with an activity to start");
+    }
+
+    /** Intent to the main activity of {@code pkg}, or null if not installed or none. */
+    private Intent launcherIntent(String pkg) {
+        Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);
+        if (intent != null) {
+            return intent;
         }
+        // The launcher may declare only a HOME activity, without the LAUNCHER category
+        Intent home = new Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_HOME)
+                .setPackage(pkg);
+        List<ResolveInfo> activities = getPackageManager().queryIntentActivities(home, 0);
+        if (activities.isEmpty()) {
+            return null;
+        }
+        ResolveInfo info = activities.get(0);
+        return home.setClassName(info.activityInfo.packageName, info.activityInfo.name);
     }
 
     private void confirmReboot() {

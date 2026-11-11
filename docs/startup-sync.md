@@ -38,13 +38,14 @@ The library adds its own timeout of **3 minutes 30 seconds** as a safety net, fo
 
 ## Requirements
 
-- Headwind MDM library (`hmdm`) **1.2.0** or later: `app/libs/hmdm-1.2.0.aar` in this project.
+- Headwind MDM library (`hmdm`) **1.2.0** or later: `app/libs/hmdm-1.2.1.aar` in this project. Use **1.2.1** or later with the Ingenico launcher (`com.hmdm.launcher.ingenico`): 1.2.0 connects only to `com.hmdm.launcher`, so with the Ingenico launcher the gate opens with `STARTUP_NO_MDM`.
 - MDM launcher with plugin API version **120** or later (`HeadwindMDM.getVersion()`). An older launcher doesn't support the startup sync: the gate opens immediately (`STARTUP_READY`), as there's no information to wait for.
-- The launcher package must be visible to the app (Android 11+):
+- The launcher package must be visible to the app (Android 11+). Library 1.2.1 declares both packages in its own manifest, so this is needed only with 1.2.0:
 
 ```xml
 <queries>
     <package android:name="com.hmdm.launcher" />
+    <package android:name="com.hmdm.launcher.ingenico" />
 </queries>
 ```
 

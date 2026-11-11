@@ -128,7 +128,8 @@ Shows how to create a demo app that uses 2 libraries:
 - hmdm libray allow the interaction of an user defined app with mdm agent included
   retrieval of mdm related info like **device Id** and **mdm server url**.
 
-The sample app also shows the **startup gate** (hmdm library 1.2.0): after boot it waits
+The sample app also shows the **startup gate** (hmdm library 1.2.0 or later; the app ships 1.2.1, which also connects to the Ingenico
+launcher package `com.hmdm.launcher.ingenico`): after boot it waits
 until the MDM launcher has installed the app updates before enabling its buttons, because
 installing an app kills it. See [Startup sync with the MDM launcher](docs/startup-sync.md).
 
@@ -154,17 +155,19 @@ runs in the background. Unlike a reboot from the web panel, it isn't recorded on
 
 ### Start MDM launcher button
 
-The **Start MDM launcher** button starts the MDM launcher (`com.hmdm.launcher.ingenico`) and
+The **Start MDM launcher** button starts the MDM launcher (`com.hmdm.launcher`, or
+`com.hmdm.launcher.ingenico` if that one is not installed) and
 takes it out of the stopped state, for example after `adb shell am force-stop` or *Force stop*
 in the system settings. A stopped app doesn't receive broadcasts and its services don't run;
 Android clears the stopped state only when one of its components is started explicitly.
 
 The button starts the launcher's main activity (`getLaunchIntentForPackage`), or its HOME
-activity if it has no LAUNCHER entry. This needs the package in the manifest's `<queries>`
+activity if it has no LAUNCHER entry. This needs the packages in the manifest's `<queries>`
 (Android 11+):
 
 ```xml
 <queries>
+    <package android:name="com.hmdm.launcher" />
     <package android:name="com.hmdm.launcher.ingenico" />
 </queries>
 ```
@@ -175,5 +178,5 @@ Notes:
   the launcher is stopped (it only times out).
 - Being a HOME app, the launcher comes to the front and the sample app goes to the background.
   Back in the sample app, press **Get device number** to reconnect to the MDM agent.
-- To check: `adb shell dumpsys package com.hmdm.launcher.ingenico | grep stopped` shows
+- To check (Ingenico launcher): `adb shell dumpsys package com.hmdm.launcher.ingenico | grep stopped` shows
   `stopped=true` before and `stopped=false` after pressing the button.
