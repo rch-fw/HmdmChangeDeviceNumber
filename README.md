@@ -151,3 +151,29 @@ library (`HeadwindMDM.sendPush("reboot", null)`), which requires:
 
 `sendPush` returning `true` means only that the launcher accepted the message; the reboot
 runs in the background. Unlike a reboot from the web panel, it isn't recorded on the server.
+
+### Start MDM launcher button
+
+The **Start MDM launcher** button starts the MDM launcher (`com.hmdm.launcher.ingenico`) and
+takes it out of the stopped state, for example after `adb shell am force-stop` or *Force stop*
+in the system settings. A stopped app doesn't receive broadcasts and its services don't run;
+Android clears the stopped state only when one of its components is started explicitly.
+
+The button starts the launcher's main activity (`getLaunchIntentForPackage`), or its HOME
+activity if it has no LAUNCHER entry. This needs the package in the manifest's `<queries>`
+(Android 11+):
+
+```xml
+<queries>
+    <package android:name="com.hmdm.launcher.ingenico" />
+</queries>
+```
+
+Notes:
+
+- The button is always visible: it doesn't wait for the startup gate, which can't open while
+  the launcher is stopped (it only times out).
+- Being a HOME app, the launcher comes to the front and the sample app goes to the background.
+  Back in the sample app, press **Get device number** to reconnect to the MDM agent.
+- To check: `adb shell dumpsys package com.hmdm.launcher.ingenico | grep stopped` shows
+  `stopped=true` before and `stopped=false` after pressing the button.
