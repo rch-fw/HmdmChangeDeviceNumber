@@ -24,6 +24,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.hmdm.HeadwindMDM;
+import com.hmdm.MDMError;
 import com.rch.mdm.MdmConfig;
 import com.rch.mdm.MdmException;
 import com.rch.mdm.MdmService;
@@ -59,6 +60,9 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     TextView deviceInfo;
 
     boolean hmdmConnected =false;
+
+    /** Set by startLauncher(): come back to the foreground once the launcher activity is up. */
+    private boolean returnFromLauncher = false;
 
     /** False until the launcher startup update is over (startup gate). */
     boolean startupReady = false;
@@ -125,6 +129,20 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
         // Last: onReady() may be called right away and uses the views above
         awaitStartupUpdate();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (returnFromLauncher) {
+            // onStop() comes after the launcher activity's onResume(), where it has already
+            // started its startup work (enrollment, configuration update), which goes on in
+            // the background. Bring this activity back to the front.
+            returnFromLauncher = false;
+            startActivity(new Intent(this, MainActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
+            log("Back to the foreground after starting the launcher");
+        }
     }
 
     @Override
@@ -216,9 +234,11 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             try {
+                returnFromLauncher = true;
                 startActivity(intent);
                 log("Started " + intent.getComponent());
             } catch (ActivityNotFoundException | SecurityException e) {
+                returnFromLauncher = false;
                 log("FAILED to start " + pkg + ": " + e);
             }
             return;
@@ -374,9 +394,18 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                int error = headwindMDM.getMdmAgentError();
+                if (error == MDMError.ERROR_NOT_CONFIGURED) {
+                    // e.g. the launcher was just installed and isn't enrolled yet
+                    deviceInfo.setText("MDM launcher not configured yet: enroll it, then press "
+                            + "\"Get device number\"");
+                    log("MDM agent connected, but not configured yet");
+                    return;
+                }
                 deviceInfo.setText(
                         "Server: " + headwindMDM.getServerHost() + "\n"
-                                + "Current device number: " + headwindMDM.getDeviceId() );
+                                + "Current device number: " + headwindMDM.getDeviceId()
+                                + (error != 0 ? "\nMDM agent error " + error : ""));
             }
         });
 

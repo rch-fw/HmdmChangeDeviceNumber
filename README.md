@@ -128,8 +128,8 @@ Shows how to create a demo app that uses 2 libraries:
 - hmdm libray allow the interaction of an user defined app with mdm agent included
   retrieval of mdm related info like **device Id** and **mdm server url**.
 
-The sample app also shows the **startup gate** (hmdm library 1.2.0 or later; the app ships 1.2.1, which also connects to the Ingenico
-launcher package `com.hmdm.launcher.ingenico`): after boot it waits
+The sample app also shows the **startup gate** (hmdm library 1.2.0 or later; the app ships 1.2.2; 1.2.1 and later also connect to the
+Ingenico launcher package `com.hmdm.launcher.ingenico`): after boot it waits
 until the MDM launcher has installed the app updates before enabling its buttons, because
 installing an app kills it. See [Startup sync with the MDM launcher](docs/startup-sync.md).
 
@@ -176,7 +176,13 @@ Notes:
 
 - The button is always visible: it doesn't wait for the startup gate, which can't open while
   the launcher is stopped (it only times out).
-- Being a HOME app, the launcher comes to the front and the sample app goes to the background.
-  Back in the sample app, press **Get device number** to reconnect to the MDM agent.
+- The launcher's activity comes to the front for about a second: the sample app brings itself
+  back in `onStop()`, which runs after the launcher's `onResume()`, when the launcher has already
+  started its enrollment and configuration update (they go on in the background). This works on
+  Android 10 (the app is still in Recents); Android 14+ blocks background activity starts, so
+  there the launcher may stay in front.
+- If the launcher was not configured yet, the sample app shows "MDM launcher not configured yet":
+  once the launcher is enrolled, press **Get device number** to reconnect to the MDM agent and read
+  the server and device number.
 - To check (Ingenico launcher): `adb shell dumpsys package com.hmdm.launcher.ingenico | grep stopped` shows
   `stopped=true` before and `stopped=false` after pressing the button.
