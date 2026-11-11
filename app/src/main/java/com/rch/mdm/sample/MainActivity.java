@@ -2,7 +2,6 @@ package com.rch.mdm.sample;
 
 import static android.view.View.VISIBLE;
 
-import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.os.Bundle;
@@ -132,12 +131,20 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Back here without onStop(): the launcher didn't start
+        returnFromLauncher = false;
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
         if (returnFromLauncher) {
             // onStop() comes after the launcher activity's onResume(), where it has already
             // started its startup work (enrollment, configuration update), which goes on in
-            // the background. Bring this activity back to the front.
+            // the background. Bring this activity back to the front: allowed from the
+            // background because LauncherStarterActivity has just finished.
             returnFromLauncher = false;
             startActivity(new Intent(this, MainActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
@@ -233,14 +240,10 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
                 continue;
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                returnFromLauncher = true;
-                startActivity(intent);
-                log("Started " + intent.getComponent());
-            } catch (ActivityNotFoundException | SecurityException e) {
-                returnFromLauncher = false;
-                log("FAILED to start " + pkg + ": " + e);
-            }
+            returnFromLauncher = true;
+            startActivity(new Intent(this, LauncherStarterActivity.class)
+                    .putExtra(LauncherStarterActivity.EXTRA_LAUNCHER_INTENT, intent));
+            log("Starting " + intent.getComponent());
             return;
         }
         log("FAILED to start the MDM launcher: none of " + TextUtils.join(", ", LAUNCHER_PACKAGES)
