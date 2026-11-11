@@ -20,8 +20,8 @@ android {
         applicationId 'com.mooney.mdm.sample'
         minSdk 21
         targetSdk 34
-        versionCode 11
-        versionName '1.10'
+        versionCode 12
+        versionName '1.11'
 
         // MDM launcher library API key (LIBRARY_API_KEY of the launcher build), needed by
         // HeadwindMDM.sendPush(). Kept out of the repository: set hmdm.apiKey in local.properties.

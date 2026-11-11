@@ -24,7 +24,10 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask">
+            <!-- singleTask: a start from outside (MDM launcher "Run at boot" / "Run after
+                 install", home screen icon) brings back the existing screen, no duplicates -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
