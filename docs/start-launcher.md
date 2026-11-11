@@ -8,6 +8,23 @@ A launcher that was force-stopped (`adb shell am force-stop`, *Force stop* in th
 
 The launcher does its startup work in its main activity (`com.hmdm.launcher.ui.MainActivity`): it reads the enrollment settings (`init.json`), chooses the device ID and starts the configuration update. Binding to its plugin service is not enough: the service starts, but nothing gets enrolled or updated. So the button starts the launcher's activity, which comes to the front, and the sample app then has to bring itself back.
 
+## When the button is shown
+
+Android 10 doesn't let an app see another app's processes, so the sample app shows the button only while one of these is true:
+
+- the launcher is in the **stopped state** (`ApplicationInfo.FLAG_STOPPED`): force-stopped or never run. It is read in `onCreate()` **before** `HeadwindMDM.connect()`, because binding to the launcher's plugin service starts the launcher's process and clears the stopped state;
+- the launcher is **not configured** (`getMdmAgentError()` is `ERROR_NOT_CONFIGURED`): it was started only through that binding and never ran its main activity.
+
+The button is hidden when no launcher is installed (there's nothing to start), and once the sample app has started the launcher. See `updateStartLauncherButton()`.
+
+Tested on the EX6000:
+
+| Case | Button |
+|---|---|
+| Clean install of both apps | shown; after pressing it, hidden |
+| Sample app reopened, launcher running and configured | hidden |
+| Launcher force-stopped (`adb shell am force-stop`), sample app reopened | shown; after pressing it, hidden (`stopped=false`) |
+
 ## How it works
 
 Two pieces:
@@ -69,6 +86,6 @@ The launcher's screen is never really seen, and it finishes its update in the ba
 
 ## Code
 
-- `app/src/main/java/com/rch/mdm/sample/MainActivity.java`: `startLauncher()`, `launcherIntent()`, `onStop()`, `onResume()`
+- `app/src/main/java/com/rch/mdm/sample/MainActivity.java`: `startLauncher()`, `launcherIntent()`, `onStop()`, `onResume()`, `isLauncherStopped()`, `updateStartLauncherButton()`
 - `app/src/main/java/com/rch/mdm/sample/LauncherStarterActivity.java`
 - `app/src/main/AndroidManifest.xml`: the `LauncherStarterActivity` declaration and the `<queries>` for the launcher packages

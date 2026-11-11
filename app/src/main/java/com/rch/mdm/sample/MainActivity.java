@@ -3,6 +3,8 @@ package com.rch.mdm.sample;
 import static android.view.View.VISIBLE;
 
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -63,6 +65,14 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     /** Set by startLauncher(): come back to the foreground once the launcher activity is up. */
     private boolean returnFromLauncher = false;
 
+    // "Start MDM launcher" is shown only while the launcher is not running:
+    // stopped (force-stopped or never run), checked before connecting because binding to its
+    // service clears the stopped state, or not configured (never started its main activity)
+    private Button startLauncherButton;
+    private boolean launcherStopped = false;
+    private boolean launcherNotConfigured = false;
+    private boolean launcherStarted = false;
+
     /** False until the launcher startup update is over (startup gate). */
     boolean startupReady = false;
 
@@ -84,6 +94,9 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         if (!BuildConfig.HMDM_API_KEY.isEmpty()) {
             headwindMDM.setApiKey(BuildConfig.HMDM_API_KEY);
         }
+
+        // Before connect(): binding to the launcher's service takes it out of the stopped state
+        launcherStopped = isLauncherStopped();
 
         if (!headwindMDM.isConnected()) {
             if (!headwindMDM.connect(this, MainActivity.this)) {
@@ -113,11 +126,13 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             }
         });
 
-        findViewById(R.id.startLauncherButton).setOnClickListener(new View.OnClickListener() {
+        startLauncherButton = findViewById(R.id.startLauncherButton);
+        startLauncherButton.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 startLauncher();
             }
         });
+        updateStartLauncherButton();
 
         rebootButton = findViewById(R.id.rebootButton);
         rebootButton.setOnClickListener(new View.OnClickListener() {
@@ -149,6 +164,8 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             startActivity(new Intent(this, MainActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
             log("Back to the foreground after starting the launcher");
+            launcherStarted = true;
+            updateStartLauncherButton();
         }
     }
 
@@ -251,6 +268,24 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     }
 
     /** Intent to the main activity of {@code pkg}, or null if not installed or none. */
+    /** True if the installed MDM launcher is in the stopped state (force-stopped or never run). */
+    private boolean isLauncherStopped() {
+        for (String pkg : LAUNCHER_PACKAGES) {
+            try {
+                ApplicationInfo info = getPackageManager().getApplicationInfo(pkg, 0);
+                return (info.flags & ApplicationInfo.FLAG_STOPPED) != 0;
+            } catch (PackageManager.NameNotFoundException e) {
+                // Try the next package
+            }
+        }
+        return false;   // no launcher installed: nothing to start
+    }
+
+    private void updateStartLauncherButton() {
+        boolean notRunning = launcherStopped || launcherNotConfigured;
+        startLauncherButton.setVisibility(notRunning && !launcherStarted ? VISIBLE : View.GONE);
+    }
+
     private Intent launcherIntent(String pkg) {
         Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);
         if (intent != null) {
@@ -398,7 +433,9 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             @Override
             public void run() {
                 int error = headwindMDM.getMdmAgentError();
-                if (error == MDMError.ERROR_NOT_CONFIGURED) {
+                launcherNotConfigured = error == MDMError.ERROR_NOT_CONFIGURED;
+                updateStartLauncherButton();
+                if (launcherNotConfigured) {
                     // e.g. the launcher was just installed and isn't enrolled yet
                     deviceInfo.setText("MDM launcher not configured yet: enroll it, then press "
                             + "\"Get device number\"");

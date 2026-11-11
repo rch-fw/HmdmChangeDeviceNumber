@@ -174,8 +174,11 @@ activity if it has no LAUNCHER entry. This needs the packages in the manifest's 
 
 Notes:
 
-- The button is always visible: it doesn't wait for the startup gate, which can't open while
-  the launcher is stopped (it only times out).
+- The button is shown only while the launcher is not running: when it is in the stopped state
+  (checked when the app starts, before connecting, because binding to the launcher's service clears
+  that state) or not configured yet. It is hidden once the sample app has started the launcher.
+  It doesn't wait for the startup gate, which can't open while the launcher is stopped (it only
+  times out).
 - The sample app stays in front: the launcher's activity shows at most for a moment, and its
   enrollment and configuration update go on in the background. See
   [Starting the MDM launcher and staying in front](docs/start-launcher.md) for how it works and

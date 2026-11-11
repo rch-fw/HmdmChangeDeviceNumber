@@ -41,12 +41,14 @@
     </LinearLayout>
 
 
-    <!-- Always visible: useful exactly when the launcher is stopped and the gate can't open -->
+    <!-- Shown only while the launcher is not running (see updateStartLauncherButton()),
+         not tied to the startup gate, which can't open while the launcher is stopped -->
     <Button
         android:id="@+id/startLauncherButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Start MDM launcher" />
+        android:text="Start MDM launcher"
+        android:visibility="gone" />
 
     <Button
         android:id="@+id/getButton"
