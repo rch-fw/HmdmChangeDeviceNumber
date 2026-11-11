@@ -42,6 +42,13 @@ android {
             minifyEnabled false
         }
     }
+
+    // APK name: sample_hmdm_app-<versionName>-<buildType>.apk
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "sample_hmdm_app-${variant.versionName}-${variant.buildType.name}.apk"
+        }
+    }
 }
 
 dependencies {
