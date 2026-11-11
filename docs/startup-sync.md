@@ -36,6 +36,34 @@ What the launcher guarantees:
 
 The library adds its own timeout of **3 minutes 30 seconds** as a safety net, for example when the launcher doesn't answer at all. It is longer than the launcher's, so normally the launcher decides.
 
+## Starting apps at boot
+
+The application flags of the configuration work as follows (launcher **6.52** or later):
+
+| Flag | When the launcher starts the app |
+|---|---|
+| **Run at boot** | When the startup update ends, once per boot. |
+| **Run after install** | Right after the configuration update which installs the app. |
+
+**Run at boot**
+
+- The startup update ends in any of these cases, and the apps are started in all of them:
+  - the apps are updated, or there was nothing to install;
+  - the configuration can't be loaded (server or network error): the saved configuration is used;
+  - the 3-minute timeout.
+- Once per boot: configuration updates later in the day don't start the apps again, and neither does a launcher restart (crash, self-update) during the same boot.
+- Also at the end of the first configuration after enrollment, so an app already installed before the launcher is started too.
+- The apps are started 5 seconds apart. Starting an app which is already running only brings it to the front.
+- Started at this point, the app is never killed by an install afterwards, and when it calls `awaitStartupUpdate` the gate is already open.
+- It doesn't depend on the launcher's main screen. The launcher starts the apps from the background, which Android 10+ allows because the launcher holds the "draw over other apps" permission (`SYSTEM_ALERT_WINDOW`). Without it, the launcher writes `Run at boot: no "draw over other apps" permission` in the device log, and Android may refuse to start the apps.
+- If the launcher's main screen is open (the launcher is the HOME app) and the configuration doesn't keep the apps in the foreground, the launcher comes back to the front after starting them, as in the standard Headwind MDM.
+
+Launcher 6.51 and earlier started these apps only from the launcher's main screen, and only if it opened within 2 minutes after boot. On the Ingenico terminals the launcher is not the HOME app and not in kiosk mode, so its main screen doesn't open at boot and the apps were never started.
+
+**Run after install** is unchanged: if the launcher's main screen is open, it starts the app after the configuration update; otherwise the configuration update starts the app as soon as it's installed. An app which is already installed at the same version is not installed again, so it isn't started either; it starts at boot if it also has **Run at boot**.
+
+Both flags are only about starting apps. When apps are *installed* is decided by **Install app updates only at device startup** (see [Configuration option](#configuration-option)).
+
 ## Requirements
 
 - Headwind MDM library (`hmdm`) **1.2.0** or later: `app/libs/hmdm-1.2.2.aar` in this project. Use **1.2.1** or later with the Ingenico launcher (`com.hmdm.launcher.ingenico`): 1.2.0 connects only to `com.hmdm.launcher`, so with the Ingenico launcher the gate opens with `STARTUP_NO_MDM`. Use **1.2.2** or later if the app sets an API key: 1.2.1 and earlier crash when the launcher has no configuration yet (just installed, not enrolled).
@@ -184,3 +212,4 @@ Device connected with `adb`. Launcher and sample app log together (the sample's 
 | No network at boot | Disable WiFi / mobile data, `adb reboot`. | The gate opens after the launcher gives up loading the configuration (at the latest after 3 minutes). |
 | App restart | Close and reopen the app during the day. | The gate opens immediately. |
 | Old launcher | Install a launcher with API version below 120. | The gate opens immediately (`STARTUP_READY`). |
+| Run at boot | Set **Run at boot** on the app in the configuration, then `adb reboot`. | When the startup update ends, the launcher starts the app; logcat shows `Run at boot: started <package>` (tag `HeadwindMDM`). |
