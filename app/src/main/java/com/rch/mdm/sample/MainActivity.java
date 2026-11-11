@@ -2,19 +2,14 @@ package com.rch.mdm.sample;
 
 import static android.view.View.VISIBLE;
 
-import android.app.Presentation;
 import android.content.ActivityNotFoundException;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
-import android.hardware.display.DisplayManager;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.text.format.DateFormat;
 import android.util.Log;
-import android.view.Display;
 import android.view.View;
-import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
@@ -53,12 +48,7 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
     private Button getButton;
 
-    private Button secondaryDisplayButton;
-
     private Button rebootButton;
-
-    /** Dialog currently shown on the secondary display, if any. */
-    private Presentation secondaryDialog;
 
     /** Created once we know the credentials; reused for the lifetime of the activity. */
     private MdmService mdmService;
@@ -120,13 +110,6 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             }
         });
 
-        secondaryDisplayButton = findViewById(R.id.secondaryDisplayButton);
-        secondaryDisplayButton.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                toggleSecondaryDialog();
-            }
-        });
-
         findViewById(R.id.startLauncherButton).setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 startLauncher();
@@ -142,13 +125,6 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
         // Last: onReady() may be called right away and uses the views above
         awaitStartupUpdate();
-    }
-
-    @Override
-    protected void onStop() {
-        // A Presentation is tied to this activity's window; it must not outlive it.
-        dismissSecondaryDialog();
-        super.onStop();
     }
 
     @Override
@@ -213,10 +189,8 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     }
 
     private void updateButtons() {
-        int visibility = startupReady ? VISIBLE : View.GONE;
-        secondaryDisplayButton.setVisibility(visibility);
         // These buttons also need the MDM agent
-        visibility = startupReady && hmdmConnected ? VISIBLE : View.GONE;
+        int visibility = startupReady && hmdmConnected ? VISIBLE : View.GONE;
         changeButton.setVisibility(visibility);
         getButton.setVisibility(visibility);
         rebootButton.setVisibility(visibility);
@@ -296,70 +270,6 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             log("FAILED to request reboot: MDM agent not connected or wrong API key (error "
                     + headwindMDM.getMdmAgentError() + ")");
         }
-    }
-
-    // ------------------------------------------------------------------
-
-    private void toggleSecondaryDialog() {
-        if (secondaryDialog != null) {
-            dismissSecondaryDialog();
-        } else {
-            showDialogOnSecondaryDisplay();
-        }
-    }
-
-    private void showDialogOnSecondaryDisplay() {
-        DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
-        Display[] displays = displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
-        if (displays.length == 0) {
-            Toast.makeText(this, "No secondary display found", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        Display display = displays[0];
-        secondaryDialog = new Presentation(this, display);
-        // Also fires when the system dismisses the dialog (e.g. the display is removed),
-        // so the button label always reflects the real state.
-        secondaryDialog.setOnDismissListener(dialog -> {
-            if (secondaryDialog == dialog) {
-                secondaryDialog = null;
-                updateSecondaryDisplayButton();
-            }
-        });
-        secondaryDialog.setContentView(R.layout.dialog_secondary_display);
-        TextView message = secondaryDialog.findViewById(R.id.secondaryMessage);
-        message.setText("Opened from the main display on \"" + display.getName() + "\".");
-        secondaryDialog.findViewById(R.id.secondaryOkButton).setOnClickListener(
-                new View.OnClickListener() {
-                    @Override public void onClick(View v) {
-                        dismissSecondaryDialog();
-                    }
-                });
-
-        try {
-            secondaryDialog.show();
-            log("Dialog shown on secondary display \"" + display.getName() + "\"");
-            updateSecondaryDisplayButton();
-        } catch (WindowManager.InvalidDisplayException e) {
-            // The display was removed between the lookup and show().
-            secondaryDialog = null;
-            log("FAILED to show dialog on secondary display: " + e.getMessage());
-        }
-    }
-
-    private void dismissSecondaryDialog() {
-        if (secondaryDialog != null) {
-            Presentation dialog = secondaryDialog;
-            secondaryDialog = null;
-            dialog.dismiss();
-            updateSecondaryDisplayButton();
-        }
-    }
-
-    private void updateSecondaryDisplayButton() {
-        secondaryDisplayButton.setText(secondaryDialog != null
-                ? "Hide dialog on secondary display"
-                : "Show dialog on secondary display");
     }
 
     // ------------------------------------------------------------------
