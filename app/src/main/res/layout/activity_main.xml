@@ -41,6 +41,13 @@
     </LinearLayout>
 
 
+    <!-- Always visible: useful exactly when the launcher is stopped and the gate can't open -->
+    <Button
+        android:id="@+id/startLauncherButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Start MDM launcher" />
+
     <Button
         android:id="@+id/getButton"
         android:layout_width="match_parent"

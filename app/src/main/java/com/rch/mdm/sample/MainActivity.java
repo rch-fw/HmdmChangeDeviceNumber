@@ -3,7 +3,10 @@ package com.rch.mdm.sample;
 import static android.view.View.VISIBLE;
 
 import android.app.Presentation;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.ResolveInfo;
 import android.hardware.display.DisplayManager;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -124,6 +127,12 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             }
         });
 
+        findViewById(R.id.startLauncherButton).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                startLauncher();
+            }
+        });
+
         rebootButton = findViewById(R.id.rebootButton);
         rebootButton.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
@@ -214,6 +223,39 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     }
 
     // ------------------------------------------------------------------
+
+    private static final String LAUNCHER_PACKAGE = "com.hmdm.launcher.ingenico";
+
+    /**
+     * Starts the MDM launcher with an explicit intent to one of its activities. Starting a
+     * component explicitly takes a force-stopped app out of the stopped state (broadcasts
+     * are not delivered to a stopped app), so the launcher restarts its services.
+     */
+    private void startLauncher() {
+        Intent intent = getPackageManager().getLaunchIntentForPackage(LAUNCHER_PACKAGE);
+        if (intent == null) {
+            // The launcher may declare only a HOME activity, without the LAUNCHER category
+            Intent home = new Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_HOME)
+                    .setPackage(LAUNCHER_PACKAGE);
+            List<ResolveInfo> activities = getPackageManager().queryIntentActivities(home, 0);
+            if (!activities.isEmpty()) {
+                ResolveInfo info = activities.get(0);
+                intent = home.setClassName(info.activityInfo.packageName, info.activityInfo.name);
+            }
+        }
+        if (intent == null) {
+            log("FAILED to start " + LAUNCHER_PACKAGE + ": not installed or no activity to start");
+            return;
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(intent);
+            log("Started " + intent.getComponent());
+        } catch (ActivityNotFoundException | SecurityException e) {
+            log("FAILED to start " + LAUNCHER_PACKAGE + ": " + e);
+        }
+    }
 
     private void confirmReboot() {
         new AlertDialog.Builder(this)

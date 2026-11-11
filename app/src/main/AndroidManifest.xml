@@ -3,6 +3,7 @@
 
     <queries>
         <package android:name="com.hmdm.launcher" />
+        <package android:name="com.hmdm.launcher.ingenico" />
     </queries>
 
     <application
