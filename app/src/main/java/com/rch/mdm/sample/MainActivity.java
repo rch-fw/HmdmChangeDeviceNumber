@@ -446,28 +446,24 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
     @Override
     public void onHeadwindMDMConnected() {
+        // Called on the main thread (ServiceConnection.onServiceConnected()), with the
+        // configuration and getMdmAgentError() already read from the launcher
         hmdmConnected=true;
         updateButtons();
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                int error = headwindMDM.getMdmAgentError();
-                launcherNotConfigured = error == MDMError.ERROR_NOT_CONFIGURED;
-                updateStartLauncherButton();
-                if (launcherNotConfigured) {
-                    // e.g. the launcher was just installed and isn't enrolled yet
-                    deviceInfo.setText("MDM launcher not configured yet: enroll it, then press "
-                            + "\"Get device number\"");
-                    log("MDM agent connected, but not configured yet");
-                    return;
-                }
-                deviceInfo.setText(
-                        "Server: " + headwindMDM.getServerHost() + "\n"
-                                + "Current device number: " + headwindMDM.getDeviceId()
-                                + (error != 0 ? "\nMDM agent error " + error : ""));
-            }
-        });
-
+        int error = headwindMDM.getMdmAgentError();
+        launcherNotConfigured = error == MDMError.ERROR_NOT_CONFIGURED;
+        updateStartLauncherButton();
+        if (launcherNotConfigured) {
+            // e.g. the launcher was just installed and isn't enrolled yet
+            deviceInfo.setText("MDM launcher not configured yet: enroll it, then press "
+                    + "\"Get device number\"");
+            log("MDM agent connected, but not configured yet");
+            return;
+        }
+        deviceInfo.setText(
+                "Server: " + headwindMDM.getServerHost() + "\n"
+                        + "Current device number: " + headwindMDM.getDeviceId()
+                        + (error != 0 ? "\nMDM agent error " + error : ""));
     }
 
     @Override
