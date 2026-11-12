@@ -173,7 +173,7 @@ flowchart TD
     A[Start the MDM launcher<br/>from the app list] --> B[Launcher enrolls<br/>device ID from the USDK serial]
     B --> C[🟥 ① Configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
     C --> D[Startup update ends without configuration]
-    D --> E[Go to the home screen, open the sample app]
+    D --> E[Go to the home screen, open the sample app<br/>the launcher has no configuration yet,<br/>so Run at boot can't start it]
     E --> F[Startup gate open<br/>'MDM launcher not configured yet']
     F --> G[Configure WiFi, Ingenico USDK<br/>choose the network, password]
     G --> H[Save and reboot<br/>WiFi auto saved, USDK reboot]
@@ -198,7 +198,7 @@ flowchart TD
     A[Start the MDM launcher<br/>from the app list] --> B[Launcher enrolls<br/>device ID from the USDK serial]
     B --> C[🟥 ① Configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
     C --> D[Startup update ends without configuration]
-    D --> E[Go to the home screen, open the sample app]
+    D --> E[Go to the home screen, open the sample app<br/>the launcher has no configuration yet,<br/>so Run at boot can't start it]
     E --> F[Startup gate open<br/>'MDM launcher not configured yet']
     F --> G[Configure WiFi, Android suggestion<br/>choose the network, password, Connect]
     G --> H{First suggestion<br/>of the app?}
