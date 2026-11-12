@@ -42,6 +42,12 @@
         android:orientation="vertical">
 
         <RadioButton
+            android:id="@+id/wifiModeAddNetwork"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Android addNetwork: connects now, no reboot" />
+
+        <RadioButton
             android:id="@+id/wifiModeUsdk"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

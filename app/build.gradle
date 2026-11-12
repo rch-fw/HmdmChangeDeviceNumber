@@ -19,9 +19,11 @@ android {
     defaultConfig {
         applicationId 'com.mooney.mdm.sample'
         minSdk 21
-        targetSdk 34
-        versionCode 18
-        versionName '1.17'
+        // targetSdk 28: Android 10 lets only apps targeting SDK 28 or lower add a WiFi network
+        // (WifiManager.addNetwork(), see docs/wifi-setup.md). Not for the Play Store.
+        targetSdk 28
+        versionCode 19
+        versionName '1.18'
 
         // MDM launcher library API key (LIBRARY_API_KEY of the launcher build), needed by
         // HeadwindMDM.sendPush(). Kept out of the repository: set hmdm.apiKey in local.properties.
@@ -30,6 +32,11 @@ android {
 
     buildFeatures {
         buildConfig true
+    }
+
+    lint {
+        // targetSdk 28 on purpose (see defaultConfig); the app is not distributed through the Play Store
+        disable 'ExpiredTargetSdkVersion', 'OldTargetApi'
     }
 
     compileOptions {

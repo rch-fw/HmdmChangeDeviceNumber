@@ -34,6 +34,7 @@ sequenceDiagram
 What the launcher guarantees:
 
 - **The gate always opens.** The launcher reports the end of the startup update when the apps are updated, when the configuration can't be loaded (server or network error), or after **3 minutes**. At the timeout, an app download or installation already running gets up to 20 more seconds to finish; the app updates not started yet are left for the next boot, and nothing is installed or removed after the gate opens.
+- **Before the enrollment** (launcher **6.54** or later). While the launcher has never loaded a configuration (new device, its main screen not opened yet), there is nothing to install and no payment can be in progress: an app calling `awaitStartupUpdate` doesn't start the 3 minutes, and a failed configuration request doesn't end the startup update. The library's safety timeout opens the app's gate; the startup update runs, with its 3 minutes, when the launcher, enrolled, loads its configuration. So the network can be set up from the app for as long as needed (see [WiFi setup](wifi-setup.md#timeouts)). With 6.53 or earlier the 3 minutes started when the app opened.
 - **Once per boot.** After the startup update, `awaitStartupUpdate` answers "over" until the next boot, even if the launcher restarts (crash, or the launcher updating itself).
 - **No app changes during the day** (unless turned off in the configuration). Outside the startup update, the launcher doesn't install or remove apps, so a running app is never killed by an update.
 

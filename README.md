@@ -117,6 +117,15 @@ guide [Staged configuration rollout by area](docs/staged-rollout-by-area.md).
 - If your server uses a self-signed certificate you must configure a
   network security config / trust manager in the host app.
 
+# Ingenico Sample App
+
+`ingenico-app/` (`com.mooney.mdm.ingenico`) does the whole initialization of an Ingenico terminal
+by itself when it is opened: if the MDM agent is not running it configures WiFi (when there is no
+network), starts the launcher, which enrolls, and waits for the startup update; if the agent is
+running it waits for the startup update only. Then it is operative, with **Get device number**,
+**Change device number**, **Sync configuration** and **Configure WiFi**. Targets SDK 28 (WiFi with
+`addNetwork`); needs launcher 6.54 or later. See [Ingenico Sample App](docs/ingenico-sample-app.md).
+
 # Sample app
 
 Shows how to create a demo app that uses 2 libraries:
@@ -151,7 +160,9 @@ now (`HeadwindMDM.forceConfigUpdate()`), for example after the network has been 
   and gives up silently. So the app stops waiting after 90 s and logs "no answer from the launcher".
 - After **Configure WiFi** with the Ingenico USDK no sync is needed: the reboot runs the startup
   update, which also installs the apps. After an Android suggestion connected, the WiFi screen offers
-  this sync. See [WiFi setup](docs/wifi-setup.md#sync-request-availability) for the sync APIs.
+  this sync. On a new device, with the launcher not enrolled yet, the sync fails: use **Start MDM
+  launcher** instead (with launcher 6.54 the startup update then installs the apps in this boot).
+  See [WiFi setup](docs/wifi-setup.md#sync-request-availability) for the sync APIs.
 
 ### Reboot button
 
@@ -217,7 +228,14 @@ Notes:
 The **Configure WiFi** button opens a screen to set the WiFi network without the system settings,
 for example on a device fresh from the factory with no network. Choose the network from the list of
 access points nearby (strongest first; **Scan** searches again) or type its name, enter the password,
-and pick one of two methods (the choice is saved):
+and pick one of three methods (the choice is saved; the first time, Android addNetwork):
+
+- **Android addNetwork**, **Connect** (default): the app adds the network
+  (`WifiManager.addNetwork()`) and Android connects in a few seconds: no user action, no reboot, any
+  signing key. Allowed on Android 10 only because the app **targets SDK 28**; whether production
+  terminals accept such an app is still to be confirmed. The network belongs to the app: removed if
+  the app is uninstalled. On a new device, then tap **Start MDM launcher**: with launcher 6.54 it
+  enrolls and installs the apps in this boot.
 
 - **Ingenico USDK**, **Save and reboot**: the app saves the network in the Ingenico "WiFi auto"
   settings (`UNetWorkManager.setWifiAutoSSID` / `setWifiAutoPasswd` / `setWifiAutoEnabled`) and
@@ -228,10 +246,13 @@ and pick one of two methods (the choice is saved):
   (`WifiManager.addNetworkSuggestions()`); Android connects a few seconds after the user allows it in
   the notification shade, without a reboot. Any signing key. Then the screen offers **Sync
   configuration** (the launcher loads its configuration now) and **Reboot** (the startup update
-  installs the apps).
+  installs the apps). On Android 10 the approval is only in a silent, collapsed notification, which
+  users don't find: **not usable** in practice.
 
-Where the USDK is not available or refuses the calls, only the Android suggestion can be selected.
-See [WiFi setup on Ingenico terminals](docs/wifi-setup.md) for a comparison of the two methods.
+Where the USDK is not available or refuses the calls, it can't be selected. See
+[WiFi setup on Ingenico terminals](docs/wifi-setup.md) for a comparison of the three methods.
+
+**Reset WiFi setup** also removes the networks the app added.
 
 A network saved through WiFi auto stays even if the app is uninstalled, and "WiFi auto" stays on:
 Ingenico's system service applies it again at every boot, recreating the network even after it is
@@ -259,4 +280,4 @@ settings.
   launcher repo (mooney-mdm-agent), or from the Ingenico USDK, to `app/libs/`. Without it the build
   stops with a message saying so. The `mdmlib` library doesn't need it.
 - Code: `WifiActivity`, `UsdkWifi`. See [WiFi setup on Ingenico terminals](docs/wifi-setup.md) for
-  how the two methods work, when a reboot or a sync request is needed, and the tests on the EX6000.
+  how the methods work, when a reboot or a sync request is needed, and the tests on the EX6000.

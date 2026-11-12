@@ -1,6 +1,8 @@
 # WiFi setup on Ingenico terminals
 
-How an app configures the WiFi network of an Ingenico terminal without the system settings. There are two methods, each with its own trade-offs: **Ingenico "WiFi auto"** through the USDK, and Android **network suggestions**. This document describes both, when each needs a reboot or a configuration sync request to the MDM launcher, the [procedures](#procedures-from-a-new-device-to-operative) from a new device to an operative one (and why not to start the launcher first), and what sync requests are available.
+How an app configures the WiFi network of an Ingenico terminal without the system settings. Two methods are usable: **Ingenico "WiFi auto"** through the USDK, and **`WifiManager.addNetwork()` from an app targeting SDK 28** (tested on a development terminal; to be confirmed on production terminals). Android **network suggestions** work too, but on Android 10 they aren't usable by a real user. This document describes the three, when each needs a reboot or a configuration sync request to the MDM launcher, the [procedures](#procedures-from-a-new-device-to-operative) from a new device to an operative one (and why not to start the launcher first), and what sync requests are available.
+
+The procedures need MDM launcher **6.54** or later: before its enrollment the launcher keeps its startup update open, so the network can take as long as needed (see [Timeouts](#timeouts)).
 
 ## Why
 
@@ -10,30 +12,33 @@ The terminals are **not in kiosk mode**: the Ingenico launcher is the home scree
 
 ## What Android allows
 
-On Android 10 (Ingenico EX6000) an ordinary app can no longer add a WiFi network silently. Tested on the EX6000 with an app targeting SDK 34, not device owner (Ingenico's `com.ingenico.dxmobile` is) and not a system app:
+On Android 10 (Ingenico EX6000) an ordinary app targeting SDK 29 or later can no longer add a WiFi network silently. Tested on the EX6000 with apps which are not device owner (Ingenico's `com.ingenico.dxmobile` is) and not system apps:
 
 | Way | Result |
 |---|---|
-| `WifiManager.addNetwork()` / `enableNetwork()` | Refused (`addNetwork` returns -1): only device owner and system apps may use them with targetSdk 29+. |
+| `WifiManager.addNetwork()` / `enableNetwork()`, targetSdk 29+ | Refused (`addNetwork` returns -1, log `addOrUpdateNetwork not allowed`): only device owner and system apps may use them. |
+| **`WifiManager.addNetwork()` / `enableNetwork()`, targetSdk 28** | **Works**: connects right away, no prompt. See [addNetwork from an app targeting SDK 28](#addnetwork-from-an-app-targeting-sdk-28). |
 | `WifiNetworkSpecifier` | The connection belongs to the app only: the launcher can't use it to reach the server. |
 | Settings WiFi panel | Works, but it is the system settings screen. |
 | **Ingenico USDK "WiFi auto"** | **Works**: connects at the next boot. See [Ingenico WiFi auto](#ingenico-wifi-auto). |
-| **`WifiManager.addNetworkSuggestions()`** | **Works**: connects right away, once the user allows it. See [Network suggestions](#network-suggestions). |
+| `WifiManager.addNetworkSuggestions()` | Works, once the user allows it in a silent notification: not usable on Android 10. See [Network suggestions](#network-suggestions). |
 
-## The two methods
+## The methods
 
-| | Ingenico WiFi auto | Network suggestions |
-|---|---|---|
-| API | Ingenico USDK `UNetWorkManager` | Android `WifiManager.addNetworkSuggestions()` |
-| Devices | Ingenico terminals | any Android 10+ device |
-| Signing key | Ingenico-approved | any |
-| User action | none | **Allow** in a silent notification, once per app |
-| Connection | at the next boot: the app reboots the device | right away, a few seconds after the approval |
-| Network | ordinary saved network, stays without the app; recreated at every boot while WiFi auto is on | the **connection is system-wide**: the device's default network, used by all apps, the launcher included. Only the **suggestion** (the network's settings) belongs to the app (`ephemeral`, `fromWifiNetworkSuggestion`): removed with the app or when the app withdraws it; kept across reboots |
-| Launcher configuration | loaded by the startup update at the reboot: no sync request | the launcher has usually given up its startup update: a sync request loads it |
-| Apps of the configuration | installed by the startup update at the reboot | installed at the next boot (a reboot right away installs them) |
+| | Ingenico WiFi auto | addNetwork, targetSdk 28 | Network suggestions |
+|---|---|---|---|
+| API | Ingenico USDK `UNetWorkManager` | Android `WifiManager.addNetwork()` | Android `WifiManager.addNetworkSuggestions()` |
+| App | any app signed with the Ingenico-approved key | an app targeting SDK 28 or lower (a small helper, see below) | any app |
+| Signing key | Ingenico-approved | any (tested with the launcher's key) | any |
+| User action | none | none | **Allow** in a silent notification, once per app install |
+| Connection | at the next boot: the app reboots the device | right away (4 s in the tests) | right away, a few seconds after the approval |
+| Network | ordinary saved network, stays without the app; recreated at every boot while WiFi auto is on | ordinary saved network, kept across reboots; owned by the app: removed if the app is uninstalled; stays forgotten if forgotten in the settings | the **connection is system-wide**; only the **suggestion** belongs to the app (`ephemeral`): removed with the app, kept across reboots |
+| Launcher configuration and apps | loaded and installed by the startup update at the reboot | loaded and installed when the app starts the launcher's main screen (launcher 6.54) | as addNetwork, after the approval |
+| Status | **tested**, usable | **tested end to end on a development terminal**; production to confirm | tested; **not usable** on Android 10 |
 
-Choose by what fits the deployment: WiFi auto needs no user action but needs the Ingenico key and a reboot; suggestions work with any key and without a reboot but need the user to find and allow the notification (it is filed under *Silent notifications*).
+In every case the connection is an ordinary system WiFi connection, used by all apps, the launcher included.
+
+Choose by what fits the deployment: WiFi auto needs the Ingenico key and a reboot, and is applied again at every boot; addNetwork needs neither, but an app targeting SDK 28, which production terminals may not accept (see [Production terminals](#production-terminals)).
 
 ## Ingenico WiFi auto
 
@@ -83,7 +88,7 @@ sequenceDiagram
     participant U as Ingenico USDK
     participant S as Ingenico system service
     participant L as MDM launcher
-    Note over A,L: no network: the startup update gave up, apps not installed
+    Note over A,L: no network: configuration not loaded, apps not installed
     A->>U: setWifiAutoSSID / setWifiAutoPasswd / setWifiAutoEnabled
     A->>U: UDeviceManager.reboot()
     Note over A,L: device reboots
@@ -92,7 +97,7 @@ sequenceDiagram
     L-->>A: startup gate open (onReady)
 ```
 
-- **Without the reboot**, the launcher has already given up: at boot it retries loading the configuration 6 times every 10 s, then ends the startup update. From then on, app installs and removals wait for the next boot (*Install app updates only at device startup*, on by default, see [Startup sync](startup-sync.md)). A sync request (`forceConfigUpdate()`) would load the configuration and apply settings and policies, but leave the apps for the next boot.
+- **Without the reboot** nothing would connect: WiFi auto is applied only at boot. (Where a launcher already enrolled has given up at boot, after 6 retries every 10 s, its startup update is over: app installs and removals wait for the next boot, *Install app updates only at device startup*, on by default, see [Startup sync](startup-sync.md).)
 - **With the reboot**, the network is there when the launcher starts: the **startup update** loads the configuration and installs the apps like on any boot, and the startup gate holds the app until they're installed. Nothing for the app to request.
 
 On the EX6000, sample app, launcher just installed, no network:
@@ -108,6 +113,44 @@ On the EX6000, sample app, launcher just installed, no network:
 | 11:49:29.756 | `Run at boot: started com.mooney.mdm.sample` |
 
 In this test the launcher had been installed through adb and never run, so it was in the stopped state and didn't receive the boot broadcast: the **Start MDM launcher** button started it (see [Starting the MDM launcher](start-launcher.md)). A launcher which has already run, or is preinstalled as a system app, starts by itself at boot.
+
+## addNetwork from an app targeting SDK 28
+
+Android 10 refuses `addNetwork()` only to apps targeting SDK 29 or later: an app targeting SDK 28 can still add a saved network and connect to it, with no prompt and no reboot.
+
+```java
+WifiConfiguration conf = new WifiConfiguration();
+conf.SSID = "\"" + ssid + "\"";
+conf.preSharedKey = "\"" + password + "\"";                 // WPA/WPA2 personal
+conf.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK); // required on Ingenico
+int netId = wifiManager.addNetwork(conf);                       // -1 = refused
+wifiManager.enableNetwork(netId, true);
+```
+
+**Set the key management.** Ingenico's `WifiManager` refuses a configuration without it, before it reaches the WiFi service: `addNetwork` returns -1 and the app's log shows `E/WifiManager: not support type: 0`. Stock Android would infer it from the password; Ingenico's firmware doesn't. (An earlier test without it had been read as a targetSdk refusal.) For an open network: `KeyMgmt.NONE` and no password.
+
+Tested on the EX6000 (development terminal) with a test app, signed with the launcher's key, no saved network in range:
+
+| Test | Result |
+|---|---|
+| targetSdk 28, `KeyMgmt.WPA_PSK` | `addNetwork` returns the network ID, `enableNetwork` true; connected with validated internet **4 s later**; no prompt, no reboot |
+| Reboot | Connected again by itself, validated: an ordinary saved network |
+| targetSdk 28, key management not set | Refused in the app: `not support type: 0` |
+| targetSdk 34, `KeyMgmt.WPA_PSK` | Refused by Android: `addOrUpdateNetwork not allowed` |
+| Uninstalling the app | Android removes the network: `Removing network "RUT200_FA74", application ... uninstalled` |
+
+**The network belongs to the app which added it.** It is removed when that app is uninstalled, and only that app can change or remove it. If the user forgets it in the settings, it stays forgotten (unlike WiFi auto).
+
+**targetSdk 28 for one app only.** The targetSdk applies to the whole app: an app targeting 28 gets the Android 9 behaviour everywhere (storage, background limits, permissions). The payment app should keep its own targetSdk; the WiFi setup goes in a **small helper app** targeting SDK 28, installed with it and kept installed (the network belongs to it), which the payment app opens or calls with the network name and password.
+
+### Production terminals
+
+The tests ran on a **development** terminal (`ro.epay.devmode=1`, `ro.customres.debugmode=true`), with a production-type firmware (`user`, `release-keys`, locked bootloader, verified boot green). Android's rule and Ingenico's key management check are in the firmware, so they should be the same on a production terminal. What is not known:
+
+- whether Ingenico's app validation or signing for production terminals (TEM / RTS, Ingenico-approved key) accepts an APK targeting SDK 28;
+- whether the development mode relaxes any WiFi or install check.
+
+To confirm with Ingenico, or by installing the helper on a production terminal through the normal channel. Until then, WiFi auto is the method known to work in production.
 
 ## Network suggestions
 
@@ -136,7 +179,9 @@ Tested on the EX6000 with a test app, WiFi auto off, no saved network:
 | 12:57:30.618 | Validated internet (`NetworkCallback`) |
 | Reboot | Connected again at about 67 s uptime, without the app running: approved suggestions are kept |
 
-The approval is asked once per app; later suggestions of the same app connect without it.
+The approval is asked once per app install; later suggestions of the same app connect without it. A reinstalled app (new uid) is asked again.
+
+**Not usable on Android 10.** The only way to approve is that notification: filed under *Silent notifications*, with no sound, no pop-up and no status bar icon, and collapsed, so **Allow** shows only after expanding it. The app can't show the prompt itself, and can't know whether the approval is still pending (`getNetworkSuggestionUserApprovalStatus()` exists only from Android 12). In a test with the sample app the user saw no reaction to **Connect** and didn't find the notification. Suggestions are described here for completeness, and for later Android versions.
 
 **Who can use the connection.** Unlike `WifiNetworkSpecifier`, whose connection is private to the app, a suggestion only allows Android to join the network: the connection is an ordinary system WiFi connection, the device's default network, used by **all apps**, the MDM launcher included (`dumpsys wifi`: `validatedInternetAccess`). After the reboot it reconnected with the suggesting app not running. What belongs to the app is the suggestion itself:
 
@@ -146,20 +191,20 @@ The approval is asked once per app; later suggestions of the same app connect wi
 
 ### After the connection
 
-The device is connected without a reboot, but the launcher's startup update has usually given up by then (6 retries every 10 s at boot). So:
+The same applies after `addNetwork`. The device is connected without a reboot:
 
-- **Sync request** (see [Sync request: availability](#sync-request-availability)): the launcher loads the configuration now and applies settings, policies, files and remote commands. If the connection comes while the startup update is still retrying, the startup update loads the configuration itself: don't request a sync then.
-- **Reboot**: the startup update at the next boot installs the apps of the configuration. Through the USDK (Ingenico key), or by hand.
+- **Launcher not enrolled yet** (new device): the app starts the launcher's main screen. The launcher enrolls, loads the configuration and installs the apps in this boot (launcher 6.54: its startup update stayed open). A sync request doesn't help here: the launcher isn't enrolled, and the request fails (tested: `network error`, 6 retries).
+- **Launcher already enrolled**, startup update over (for example it was enrolled earlier in a boot without network, with launcher 6.53 or earlier, or after the 3 minutes): a **sync request** (see [Sync request: availability](#sync-request-availability)) loads the configuration and applies settings, policies, files and remote commands; the apps wait for the next boot, so **reboot** to install them.
 
-The app has to tell the user where the notification is, and wait for the connection (`NetworkCallback` with `NET_CAPABILITY_VALIDATED`).
+The app waits for the connection with a `NetworkCallback` (`NET_CAPABILITY_VALIDATED`).
 
 Android 11 and later also offer `Settings.ACTION_WIFI_ADD_NETWORKS`, a system dialog which saves the network as an ordinary user network; not available on Android 10.
 
 ## Procedures: from a new device to operative
 
-The procedures apply to any app which implements this logic; the sample app is one example (its buttons are given in brackets). WiFi is configured through the Ingenico USDK or through a network suggestion. Starting point:
+The procedures apply to any app which implements this logic; the sample app is one example (its buttons are given in brackets). WiFi is configured through the Ingenico USDK, through `addNetwork` (targetSdk 28 helper), or through a network suggestion. Starting point:
 
-- the launcher (`com.hmdm.launcher.ingenico`) and the app installed, the launcher never run (stopped state);
+- the launcher (`com.hmdm.launcher.ingenico`, **6.54** or later) and the app installed, the launcher never run (stopped state);
 - no network;
 - the app marked *Run at boot* in the configuration; *Install app updates only at device startup* on (default).
 
@@ -169,9 +214,9 @@ What decides the steps:
 
 - The launcher **enrolls** (reads its enrollment settings, chooses the device ID) only in its main screen: when it is started by hand, or by the app starting its main activity (sample app: **Start MDM launcher**, see [Starting the MDM launcher](start-launcher.md)). Binding to its plugin service (`HeadwindMDM.connect()`) starts its process but doesn't enroll it: `getMdmAgentError()` is `ERROR_NOT_CONFIGURED`.
 - The launcher knows which apps to start (*Run at boot*) and install only from its **configuration**, loaded from the server: without a network it has none.
-- Apps are installed only by the **startup update**, the first configuration update of a boot. It ends when the configuration is loaded and the apps installed, or when the configuration can't be loaded (6 retries every 10 s, about 60 s), or 3 minutes after it started; after that, apps wait for the next boot.
+- Apps are installed only by the **startup update**, the first configuration update of a boot. It ends when the configuration is loaded and the apps installed, or when the configuration can't be loaded (6 retries every 10 s, about 60 s), or 3 minutes after it started; after that, apps wait for the next boot. **Before the enrollment** (no configuration ever loaded) the launcher keeps it open: the 3 minutes don't start and a failed request doesn't end it. It runs when the launcher, enrolled, loads its configuration (launcher 6.54).
 
-> 🟦 **Blue blocks, marked 👆: user interaction.** Only two steps need the user: tapping the app's icon (nothing starts it while the launcher has no configuration), and allowing a network suggestion (Android asks the user). The other steps are done by the app by itself: the network name and password, saving and rebooting, starting the launcher's main screen. The sample app asks for them through its screen and buttons, but that's the sample's choice.
+> 🟦 **Blue blocks, marked 👆: user interaction.** Only two steps need the user: tapping the app's icon (nothing starts it while the launcher has no configuration), and allowing a network suggestion (Android asks the user). The other steps are done by the app by itself: the network name and password, saving and rebooting, adding the network, starting the launcher's main screen. The sample app asks for them through its screen and buttons, but that's the sample's choice.
 >
 > 🟥 **Red blocks: about 60 s of delay.** Each is marked ① in the chart and explained by the ① note right below it.
 
@@ -182,10 +227,10 @@ In the charts, the blocks in **red** are where the launcher's configuration retr
 Starting the MDM launcher first (tapping its icon) on a device without network is not effective:
 
 - **It doesn't start the app.** The launcher enrolls, but it can't load its configuration, so it doesn't know the app is *Run at boot*: the user still has to go to the home screen and open the app by hand to configure WiFi.
-- **It adds about 60 s.** Its configuration request is retried 6 times every 10 s before the startup update ends; meanwhile the app's startup gate stays closed.
-- **With a network suggestion it costs a reboot.** Those failed retries end the startup update before the WiFi is connected: the configuration can then be loaded with a sync request, but the apps wait for the next boot.
+- **It adds about 60 s.** Its configuration request is retried 6 times every 10 s; meanwhile the app's startup gate stays closed.
+- **Without a reboot, it needs a sync request afterwards.** With launcher 6.54 the failed retries no longer end the startup update (no configuration was ever loaded), but they stop: once the WiFi is connected, something has to ask for the configuration again (a sync request from the app). Not tested. With launcher 6.53 or earlier the failed retries ended the startup update, and the apps waited for the next boot.
 
-The enrollment the launcher needs can be started from the app, without leaving it, at the right moment: before the reboot with the Ingenico USDK ([1, optimized](#1-optimized-wifi-through-the-ingenico-usdk)), after the WiFi connected with a network suggestion ([2](#2-wifi-through-a-network-suggestion)).
+The enrollment the launcher needs can be started from the app, without leaving it, at the right moment: before the reboot with the Ingenico USDK ([1, optimized](#1-optimized-wifi-through-the-ingenico-usdk)), after the WiFi connected with `addNetwork` ([2](#2-wifi-through-addnetwork-targetsdk-28-helper)) or a network suggestion ([3](#3-wifi-through-a-network-suggestion)).
 
 ### 1. WiFi through the Ingenico USDK
 
@@ -205,7 +250,7 @@ flowchart TD
     class A,F user
 ```
 
-Tested on the EX6000 with the sample app (see the log in [After the reboot no sync request is needed](#after-the-reboot-no-sync-request-is-needed)), with the launcher started 12 s after opening the app. Started after more than 3 min, the apps would wait for one more reboot: see [Timeouts](#timeouts-what-is-practicable) and the optimized chart.
+Tested on the EX6000 with the sample app (see the log in [After the reboot no sync request is needed](#after-the-reboot-no-sync-request-is-needed)), with the launcher started 12 s after opening the app. With launcher 6.54 there is no time limit: the launcher, not enrolled, keeps its startup update open until it is started. The optimized chart saves the second tap on the app's icon.
 
 ### 1, optimized: WiFi through the Ingenico USDK
 
@@ -236,51 +281,78 @@ flowchart TD
 
 > 🟥 **① About 60 s of delay** (red block ① in the chart), but harmless: the launcher's failed configuration requests run **in the background, in parallel** with the WiFi configuration. The user doesn't wait for them: the network can be saved and the device rebooted right away, and the reboot simply interrupts them. They only keep the startup gate closed meanwhile. After the reboot nothing waits.
 
-After the reboot no step depends on the user, so no timeout can be missed. With WiFi through the Ingenico USDK, the best procedure is therefore: **start the launcher first** (sample app: **Start MDM launcher**), then **save the network and reboot** (sample app: **Save and reboot**).
+After the reboot no step depends on the user. With WiFi through the Ingenico USDK, the best procedure is therefore: **start the launcher first** (sample app: **Start MDM launcher**), then **save the network and reboot** (sample app: **Save and reboot**).
 
-### 2. WiFi through a network suggestion
+### 2. WiFi through addNetwork (targetSdk 28 helper)
+
+```mermaid
+flowchart TD
+    A[👆 Open the app<br/>tap its icon] --> B[App connects to the launcher<br/>launcher not enrolled<br/>startup gate waiting]
+    B --> C[Add the network through the helper<br/>addNetwork, network name, password]
+    C --> D[Connected with internet<br/>no reboot]
+    D --> E[App starts the launcher's main screen<br/>and comes back to the front]
+    E --> F[Launcher enrolls, loads the configuration]
+    F --> G[Startup update of this boot:<br/>apps installed]
+    G --> H[Startup gate open<br/>Run at boot starts the app]
+    H --> K([Operative])
+    classDef user fill:#d6eaf8,stroke:#2471a3,stroke-width:2px,color:#000
+    class A user
+```
+
+No reboot, no sync request, no time limit. Tested end to end on the EX6000 (development terminal), launcher 6.54, the sample app, and a test app targeting SDK 28 for the WiFi step; no saved network in range. The WiFi step was done more than 5 minutes after opening the app, with a sync request tapped in between while there was no network:
+
+| Time | Event |
+|---|---|
+| 18:02:45 | Sample app opened. Launcher (background): `Startup update awaited before the enrollment, timeout not started` |
+| 18:06:14 | The library's 3.5 min safety timeout opens the sample app's gate; the launcher's startup update stays open |
+| 18:06:28–18:07:38 | **Sync configuration** with no network: 6 failed retries, then `Startup update kept open: configuration not loaded before the enrollment (network error)` |
+| 18:07:51 | Test app (targetSdk 28): `addNetwork` returns the network ID, `enableNetwork` true |
+| 18:07:55 | Connected, validated internet |
+| 18:08:17 | Sample app: **Start MDM launcher**; the launcher enrolls |
+| 18:08:19 | Launcher: `Configuration updated` |
+| 18:08:21–26 | Startup update installs `com.hmdm.pager` |
+| 18:08:26.911 | `Startup update completed` |
+| 18:08:31.950 | `Run at boot: started com.mooney.mdm.sample` |
+
+### 3. WiFi through a network suggestion
 
 ```mermaid
 flowchart TD
     A[👆 Open the app<br/>tap its icon] --> B[App connects to the launcher<br/>launcher not enrolled<br/>startup gate waiting]
     B --> C[Suggest the network<br/>addNetworkSuggestions]
-    C --> D{First suggestion<br/>of the app?}
+    C --> D{First suggestion<br/>of this app install?}
     D -- yes --> E[👆 User allows it: notification shade,<br/>Silent notifications,<br/>Allow suggested Wi-Fi networks?, ALLOW]
     D -- no --> F
     E --> F[Connected with internet<br/>no reboot]
     F --> G[App starts the launcher's main screen<br/>and comes back to the front]
     G --> H[Launcher enrolls, loads the configuration]
-    H --> I{Startup update of this boot<br/>still open? within 3 min}
-    I -- yes --> J[Apps installed<br/>startup gate open]
+    H --> I[Startup update of this boot:<br/>apps installed]
+    I --> J[Startup gate open<br/>Run at boot starts the app]
     J --> P([Operative])
-    I -- no --> L[Configuration applied, apps wait<br/>startup gate already open]
-    L --> M[Reboot through the USDK]
-    M --> N[Boot: suggested network reconnects<br/>startup update installs the apps]
-    N --> O[Run at boot starts the app]
-    O --> P
     classDef user fill:#d6eaf8,stroke:#2471a3,stroke-width:2px,color:#000
     class A,E user
 ```
 
-In this procedure no sync request is needed: starting the launcher loads the configuration. The 3 minutes run from the first request of the boot, here the app's startup gate.
+The same as procedure 2 once connected, but the approval step makes it [not usable on Android 10](#network-suggestions).
 
-Procedures 1, optimized, and 2 combine steps tested on the EX6000 one by one (the launcher started without network, the USDK reboot, the suggestion approval and connection); they haven't been run end to end.
+### Timeouts
 
-### Timeouts: what is practicable
-
-Two launcher timeouts decide whether a procedure installs the apps in the current boot or needs one more reboot (the launcher is left as it is):
+Three timeouts are involved:
 
 | Timeout | Starts | When it expires |
 |---|---|---|
-| **Configuration retries**: 6 × 10 s, about 60 s | when the enrolled launcher first asks for the configuration in a boot (at boot, or when its main screen enrolls it) | the startup update ends without configuration; the startup gate opens; apps wait for the next boot |
-| **Startup update**: 3 min | at the first request of the boot to the startup update: the app's startup gate (`awaitStartupUpdate`), or the launcher's own update | the startup update ends; apps wait for the next boot |
+| **Configuration retries**: 6 × 10 s, about 60 s | at each configuration request of the launcher which fails with a network error | the request gives up. If the launcher **has a configuration** (enrolled earlier), the startup update ends and the apps wait for the next boot. If it **never loaded one** (not enrolled yet), the startup update stays open (launcher 6.54). |
+| **Startup update**: 3 min | launcher with a configuration: at the first request of the boot (the app's startup gate `awaitStartupUpdate`, or the launcher's own update). Launcher not enrolled: when it, enrolled, first updates the apps (launcher 6.54) | the startup update ends; the apps not installed yet wait for the next boot |
+| **Library safety net**: 3 min 30 s | when the app calls `awaitStartupUpdate` | the app's startup gate opens (`STARTUP_TIMEOUT`); the launcher's startup update is not affected |
 
-Both are counted once per boot, and the WiFi configuration doesn't wait for either: it can be done while the startup gate is still closed.
+With launcher 6.54 none of them limits the time spent setting up the network on a new device: while the launcher isn't enrolled there is nothing to install and no payment can be in progress, so the startup update waits for the enrollment. With launcher 6.53 or earlier the 3 minutes started when the app opened, and a failed request before the WiFi connected ended the startup update: the apps then waited for one more reboot.
 
-| Procedure | As charted | Timeout | Optimized |
+| Procedure | User steps | Reboot | Status |
 |---|---|---|---|
-| 1. USDK | **At risk** | After the reboot the app's startup gate starts the 3 min (the launcher, not enrolled, does nothing at boot). If the launcher is started later than 3 min after opening the app, the startup update has expired: configuration loaded, apps wait, one more reboot. | **Start the launcher before saving the network and rebooting** ([1, optimized](#1-optimized-wifi-through-the-ingenico-usdk)): after the reboot the launcher starts by itself, and its startup update loads the configuration and installs the apps with no user action. |
-| 2. Suggestion | **Practicable within 3 min** of opening the app | The 3 min start when the app opens (its startup gate). WiFi, approval and the launcher start must all fit in them. Starting the launcher **before** the WiFi connects is worse: its 60 s retries fail and end the startup update. | Order: open the app → suggest the network → allow it → start the launcher, without pauses (sample app: **Configure WiFi** → **Connect** → **Allow** → **Start MDM launcher**). Past 3 min: reboot, as charted. |
+| 1. USDK | open the app twice | 1 | tested |
+| 1, optimized | open the app once | 1 | steps tested one by one |
+| 2. addNetwork | open the app once | none | **tested end to end** (development terminal) |
+| 3. Suggestion | open the app, find and allow the notification | none | tested; not usable on Android 10 |
 
 ## Network list
 
@@ -288,7 +360,7 @@ Both methods can show the access points nearby. `WifiManager.getScanResults()` o
 
 ## Sync request: availability
 
-The launcher (plugin API, any version since 1.1.5) loads the configuration from the server on request; no API key is needed. Useful after a network suggestion connected, or when settings changed on the server during the day.
+The launcher (plugin API, any version since 1.1.5) loads the configuration from the server on request; no API key is needed. Useful when the launcher, already enrolled, couldn't load its configuration at boot and the network came later, or when settings changed on the server during the day. Not before the enrollment: the launcher has no device ID yet, and the request fails.
 
 | API | Since | Reports |
 |---|---|---|
@@ -305,11 +377,13 @@ The sample app's **Sync configuration** button uses `HeadwindMDM.forceConfigUpda
 
 ## Sample app
 
-- **Configure WiFi** (main screen, always shown, not tied to the startup gate): setup method, list of access points, network name, password. The chosen method is saved (the first time, Ingenico USDK is selected):
+- See also the [Ingenico Sample App](ingenico-sample-app.md), which does all the steps by itself.
+- **Configure WiFi** (main screen, always shown, not tied to the startup gate): setup method, list of access points, network name, password. The sample app targets SDK 28 (1.18 and later), so it offers all three methods. The chosen method is saved (the first time, Android addNetwork is selected):
+  - **Android addNetwork** (default): **Connect** adds the network and waits for internet; then, on a new device, **Start MDM launcher** on the main screen. Open networks are allowed. Tested end to end: opened 19:21:00, connected 19:21:46, operative 19:22:46 (launcher 6.54).
   - **Ingenico USDK**: **Save and reboot** saves the network in WiFi auto and reboots through the USDK.
-  - **Android suggestion**: **Connect** suggests the network and tells the user where to allow it (notification shade, *Silent notifications*, *Allow suggested Wi‑Fi networks?*, **ALLOW**). When the device is connected with internet the screen offers **Sync configuration** (the main screen requests the sync and waits for it; skipped while the launcher's startup update is still running) and **Reboot** (through the USDK, so the startup update installs the apps). Open networks are allowed (empty password).
-  - Where the USDK is not available or refuses the calls (signing key), only the Android suggestion can be selected.
-- **Reset WiFi setup** (same screen): removes the app's suggestions and turns WiFi auto off, clearing its network and password. To reproduce a device fresh from the factory: press it, then forget the network in the settings.
+  - **Android suggestion**: **Connect** suggests the network and tells the user where to allow it (notification shade, *Silent notifications*, *Allow suggested Wi‑Fi networks?*, **ALLOW**). When the device is connected with internet the screen offers **Sync configuration** (the main screen requests the sync and waits for it; skipped while the launcher's startup update is still running) and **Reboot** (through the USDK, so the startup update installs the apps). On a new device, with the launcher not enrolled, use **Start MDM launcher** instead: the sync fails before the enrollment. Open networks are allowed (empty password).
+  - Where the USDK is not available or refuses the calls (signing key), it can't be selected.
+- **Reset WiFi setup** (same screen): removes the networks the app added and its suggestions, and turns WiFi auto off, clearing its network and password. To reproduce a device fresh from the factory: press it, then forget the network in the settings.
 - **Sync configuration** (main screen, once the startup gate is open).
 
 Code: `WifiActivity`, `UsdkWifi` (`save()`, `reboot()`, `reset()`, `readStatus()`), `MainActivity.syncConfig()`.

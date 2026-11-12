@@ -13,6 +13,7 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.net.wifi.ScanResult;
+import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.net.wifi.WifiNetworkSuggestion;
@@ -43,16 +44,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Configures the WiFi network without the system settings, in one of two modes
+ * Configures the WiFi network without the system settings, in one of three modes
  * (see docs/wifi-setup.md):
  *
+ * - Android addNetwork (WifiManager.addNetwork()): Android connects right away, no prompt, no
+ *   reboot, any signing key. Allowed on Android 10 only because the app targets SDK 28. The network
+ *   belongs to the app: removed if the app is uninstalled. On a new device the MDM launcher, not
+ *   enrolled yet, then enrolls and installs the apps in this boot when it is started (launcher 6.54).
  * - Ingenico USDK (UsdkWifi): the network is saved in the "WiFi auto" settings, then the device
  *   reboots and connects at boot; the MDM launcher's startup update then loads the configuration
  *   and installs the apps. Needs the Ingenico-approved signing key.
  * - Android suggestion (WifiManager.addNetworkSuggestions()): Android connects without a reboot,
- *   once the user allows the suggestion in the notification shade. Any signing key. The launcher
- *   has usually given up its startup update by then: a sync loads the configuration, and the apps
- *   are installed at the next boot.
+ *   once the user allows the suggestion in a silent notification, which users hardly find:
+ *   not usable in practice on Android 10.
  *
  * Not tied to the startup gate: without a network the gate stays closed until the launcher
  * gives up, and configuring WiFi is not interrupted by an app update.
@@ -67,11 +71,14 @@ public class WifiActivity extends AppCompatActivity {
 
     private static final String PREFS = "sample";
     private static final String PREF_MODE = "wifiMode";
+    private static final String MODE_ADD_NETWORK = "addNetwork";
     private static final String MODE_USDK = "usdk";
     private static final String MODE_SUGGESTION = "suggestion";
 
     // After this time without a connection, remind the user to allow the suggestion (keeps waiting)
     private static final long SUGGESTION_REMINDER_MS = 60 * 1000;
+    // addNetwork connects in a few seconds: after this, hint at a wrong password or no signal
+    private static final long ADD_NETWORK_REMINDER_MS = 20 * 1000;
 
     /** An access point of the scan, one per SSID (the strongest). */
     private class AccessPoint {
@@ -88,9 +95,9 @@ public class WifiActivity extends AppCompatActivity {
             open = !caps.contains("WPA") && !caps.contains("WEP") && !caps.contains("SAE") && !caps.contains("EAP");
         }
 
-        /** "WiFi auto" takes a WPA/WPA2 password; a suggestion can also be an open network. */
+        /** "WiFi auto" takes a WPA/WPA2 password; addNetwork and suggestions also take open networks. */
         boolean supported() {
-            return psk || (open && isSuggestionMode());
+            return psk || (open && !isUsdkMode());
         }
 
         @Override
@@ -111,6 +118,7 @@ public class WifiActivity extends AppCompatActivity {
     private boolean receiverRegistered;
 
     private TextView status;
+    private RadioButton modeAddNetwork;
     private RadioButton modeUsdk;
     private RadioButton modeSuggestion;
     private EditText ssidField;
@@ -125,8 +133,8 @@ public class WifiActivity extends AppCompatActivity {
     /** Set while the mode is switched by the app, not by the user: not saved. */
     private boolean forcedMode;
 
-    /** SSID of the suggestion waiting for the connection, null if none. */
-    private String suggestedSsid;
+    /** SSID of the network added or suggested, waiting for the connection; null if none. */
+    private String pendingSsid;
     private ConnectivityManager.NetworkCallback networkCallback;
 
     private final BroadcastReceiver scanReceiver = new BroadcastReceiver() {
@@ -137,9 +145,10 @@ public class WifiActivity extends AppCompatActivity {
         }
     };
 
-    private final Runnable suggestionReminder = () -> {
-        if (suggestedSsid != null) {
-            status.setText("Not connected yet to " + suggestedSsid + ".\n" + approvalHint());
+    private final Runnable connectionReminder = () -> {
+        if (pendingSsid != null) {
+            status.setText("Not connected yet to " + pendingSsid + ".\n" + (isSuggestionMode()
+                    ? approvalHint() : "Check the password and that the network is in range."));
         }
     };
 
@@ -160,6 +169,7 @@ public class WifiActivity extends AppCompatActivity {
         resetButton = findViewById(R.id.wifiResetButton);
         connectedPanel = findViewById(R.id.wifiConnectedPanel);
         progress = findViewById(R.id.wifiProgress);
+        modeAddNetwork = findViewById(R.id.wifiModeAddNetwork);
         modeUsdk = findViewById(R.id.wifiModeUsdk);
         modeSuggestion = findViewById(R.id.wifiModeSuggestion);
 
@@ -189,9 +199,9 @@ public class WifiActivity extends AppCompatActivity {
             ssidField.setText(ap.ssid);
             ssidField.setError(null);
             if (!ap.supported()) {
-                ssidField.setError(isSuggestionMode()
-                        ? "Only WPA/WPA2 personal and open networks are supported"
-                        : "Only WPA/WPA2 personal networks are supported");
+                ssidField.setError(isUsdkMode()
+                        ? "Only WPA/WPA2 personal networks are supported"
+                        : "Only WPA/WPA2 personal and open networks are supported");
             }
             if (ap.open) {
                 passwordField.setText("");
@@ -201,11 +211,13 @@ public class WifiActivity extends AppCompatActivity {
         });
         findViewById(R.id.wifiScanButton).setOnClickListener(v -> scan());
 
-        boolean suggestion = MODE_SUGGESTION.equals(prefs.getString(PREF_MODE, MODE_USDK));
-        (suggestion ? modeSuggestion : modeUsdk).setChecked(true);
+        String mode = prefs.getString(PREF_MODE, MODE_ADD_NETWORK);
+        (MODE_USDK.equals(mode) ? modeUsdk : MODE_SUGGESTION.equals(mode) ? modeSuggestion : modeAddNetwork)
+                .setChecked(true);
         ((RadioGroup) findViewById(R.id.wifiMode)).setOnCheckedChangeListener((group, checkedId) -> {
             if (!forcedMode) {
-                prefs.edit().putString(PREF_MODE, isSuggestionMode() ? MODE_SUGGESTION : MODE_USDK).apply();
+                prefs.edit().putString(PREF_MODE, isUsdkMode() ? MODE_USDK
+                        : isSuggestionMode() ? MODE_SUGGESTION : MODE_ADD_NETWORK).apply();
             }
             updateMode();
         });
@@ -232,19 +244,25 @@ public class WifiActivity extends AppCompatActivity {
         return modeSuggestion.isChecked();
     }
 
+    private boolean isUsdkMode() {
+        return modeUsdk.isChecked();
+    }
+
     private void updateMode() {
-        saveButton.setText(isSuggestionMode() ? "Connect" : "Save and reboot");
+        saveButton.setText(isUsdkMode() ? "Save and reboot" : "Connect");
         listAdapter.notifyDataSetChanged();
     }
 
-    /** The USDK can't be used: Android suggestion only. */
+    /** The USDK can't be used: the Android modes only. */
     private void disableUsdk(String reason) {
         usdkUsable = false;
         modeUsdk.setEnabled(false);
         modeUsdk.setText("Ingenico USDK: not available (" + reason + ")");
-        forcedMode = true;
-        modeSuggestion.setChecked(true);
-        forcedMode = false;
+        if (isUsdkMode()) {
+            forcedMode = true;
+            modeAddNetwork.setChecked(true);
+            forcedMode = false;
+        }
     }
 
     // ---- Status ----
@@ -261,8 +279,7 @@ public class WifiActivity extends AppCompatActivity {
             if (error != null) {
                 Log.w(TAG, "WiFi: can't read the USDK settings: " + error);
                 disableUsdk("calls refused, the app must be signed with the Ingenico-approved key");
-                status.setText(connection + "\nIngenico USDK refused the calls (" + error
-                        + "): using the Android suggestion");
+                status.setText(connection + "\nIngenico USDK refused the calls (" + error + ")");
                 return;
             }
             status.setText(connection + (autoEnabled && !ssid.isEmpty()
@@ -373,13 +390,17 @@ public class WifiActivity extends AppCompatActivity {
             ssidField.setError("Enter the network name");
             return;
         }
-        if (isSuggestionMode()) {
+        if (!isUsdkMode()) {
             // Empty password: open network
             if (!password.isEmpty() && password.length() < 8) {
                 passwordField.setError("WPA/WPA2 password: at least 8 characters (empty for an open network)");
                 return;
             }
-            suggest(ssid, password);
+            if (isSuggestionMode()) {
+                suggest(ssid, password);
+            } else {
+                addNetwork(ssid, password);
+            }
             return;
         }
         if (password.length() < 8) {
@@ -418,6 +439,65 @@ public class WifiActivity extends AppCompatActivity {
     }
 
     /**
+     * Android addNetwork: a saved network, connected right away. Android 10 allows it only to apps
+     * targeting SDK 28 or lower. Ingenico's WifiManager refuses a configuration without the key
+     * management ("not support type: 0"), so it is always set.
+     */
+    @SuppressWarnings("deprecation")
+    private void addNetwork(String ssid, String password) {
+        // Replace this app's earlier network with the same name (Android refuses a duplicate)
+        removeOwnNetworks(ssid);
+        WifiConfiguration conf = new WifiConfiguration();
+        conf.SSID = "\"" + ssid + "\"";
+        if (password.isEmpty()) {
+            conf.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+        } else {
+            conf.preSharedKey = "\"" + password + "\"";
+            conf.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
+        }
+        if (!wifiManager.isWifiEnabled()) {
+            wifiManager.setWifiEnabled(true);
+        }
+        int netId = wifiManager.addNetwork(conf);
+        if (netId == -1) {
+            // Never log the password
+            status.setText("FAILED to add the network " + ssid + " (refused by Android)."
+                    + "\nIf it was saved by the settings or another app, forget it there first.");
+            Log.w(TAG, "WiFi: FAILED to add network " + ssid + " (addNetwork refused)");
+            return;
+        }
+        boolean enabled = wifiManager.enableNetwork(netId, true);
+        Log.i(TAG, "WiFi: network " + ssid + " added (Android addNetwork, id " + netId
+                + ", enabled " + enabled + "), waiting for the connection");
+        connectedPanel.setVisibility(View.GONE);
+        pendingSsid = ssid;
+        status.setText("Network " + ssid + " added, connecting...");
+        waitForConnection();
+    }
+
+    /**
+     * Removes the networks this app added (all, or those named ssid). Android lets an app remove only
+     * its own networks: the others stay. Returns how many were removed.
+     */
+    @SuppressWarnings("deprecation")
+    private int removeOwnNetworks(String ssid) {
+        List<WifiConfiguration> configs = wifiManager.getConfiguredNetworks();
+        if (configs == null) {
+            return 0;
+        }
+        int removed = 0;
+        for (WifiConfiguration config : configs) {
+            if (ssid != null && !("\"" + ssid + "\"").equals(config.SSID)) {
+                continue;
+            }
+            if (wifiManager.removeNetwork(config.networkId)) {
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    /**
      * Android suggestion: Android connects once the user allows the app's suggestions (notification),
      * when the network is in range. The approval is asked only once per app.
      */
@@ -439,10 +519,10 @@ public class WifiActivity extends AppCompatActivity {
         Log.i(TAG, "WiFi: network " + ssid + " suggested (Android suggestion), waiting for the connection");
         connectedPanel.setVisibility(View.GONE);
         if (ssid.equals(connectedSsid())) {
-            onSuggestionConnected(ssid);
+            onConnected(ssid);
             return;
         }
-        suggestedSsid = ssid;
+        pendingSsid = ssid;
         status.setText("Network " + ssid + " suggested, waiting for the connection...\n" + approvalHint());
         waitForConnection();
     }
@@ -464,31 +544,33 @@ public class WifiActivity extends AppCompatActivity {
             public void onAvailable(Network network) {
                 handler.post(() -> {
                     String ssid = connectedSsid();
-                    if (suggestedSsid != null && (ssid == null || ssid.equals(suggestedSsid))) {
-                        onSuggestionConnected(suggestedSsid);
+                    if (pendingSsid != null && (ssid == null || ssid.equals(pendingSsid))) {
+                        onConnected(pendingSsid);
                     }
                 });
             }
         };
         connectivityManager.registerNetworkCallback(request, networkCallback);
-        handler.postDelayed(suggestionReminder, SUGGESTION_REMINDER_MS);
+        handler.postDelayed(connectionReminder, isSuggestionMode() ? SUGGESTION_REMINDER_MS : ADD_NETWORK_REMINDER_MS);
     }
 
     private void stopWaitingForConnection() {
-        handler.removeCallbacks(suggestionReminder);
+        handler.removeCallbacks(connectionReminder);
         if (networkCallback != null) {
             connectivityManager.unregisterNetworkCallback(networkCallback);
             networkCallback = null;
         }
     }
 
-    private void onSuggestionConnected(String ssid) {
-        suggestedSsid = null;
+    private void onConnected(String ssid) {
+        pendingSsid = null;
         stopWaitingForConnection();
-        Log.i(TAG, "WiFi: connected to " + ssid + " with internet (Android suggestion)");
+        Log.i(TAG, "WiFi: connected to " + ssid + " with internet ("
+                + (isSuggestionMode() ? "Android suggestion" : "Android addNetwork") + ")");
         status.setText("Connected to " + ssid + " with internet.\n"
-                + "Sync configuration: the MDM launcher loads its configuration now (settings, policies).\n"
-                + "Reboot: the launcher's startup update also installs the apps.");
+                + "New device: go back and tap Start MDM launcher, which installs the apps now.\n"
+                + "Launcher already enrolled: Sync configuration loads its configuration (settings, "
+                + "policies); Reboot also installs the apps.");
         connectedPanel.setVisibility(View.VISIBLE);
     }
 
@@ -515,7 +597,7 @@ public class WifiActivity extends AppCompatActivity {
     // ---- Reset ----
 
     /**
-     * Back to the factory state: removes the app's Android suggestions and resets Ingenico
+     * Back to the factory state: removes the networks this app added, its Android suggestions, and resets Ingenico
      * "WiFi auto" (off, no SSID, no password). Otherwise the network comes back at every boot, even
      * after forgetting it in the settings. To reproduce a device fresh from the factory: reset here,
      * then forget the network in the settings.
@@ -523,18 +605,19 @@ public class WifiActivity extends AppCompatActivity {
     private void confirmReset() {
         new AlertDialog.Builder(this)
                 .setTitle("Reset WiFi setup")
-                .setMessage("Remove this app's suggested networks and turn off Ingenico WiFi auto (network and "
-                        + "password cleared)? A network already saved by Android stays: forget it in the "
-                        + "settings to start from scratch.")
+                .setMessage("Remove the networks this app added or suggested, and turn off Ingenico WiFi auto "
+                        + "(network and password cleared)? A network saved by the settings or by WiFi auto stays: "
+                        + "forget it in the settings to start from scratch.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Reset", (dialog, which) -> reset())
                 .show();
     }
 
     private void reset() {
-        suggestedSsid = null;
+        pendingSsid = null;
         stopWaitingForConnection();
         connectedPanel.setVisibility(View.GONE);
+        Log.i(TAG, "WiFi: " + removeOwnNetworks(null) + " network(s) added by this app removed");
         int removed = wifiManager.removeNetworkSuggestions(new ArrayList<>());
         Log.i(TAG, "WiFi: suggestions removed (status " + removed + ")");
         ssidField.setText("");
