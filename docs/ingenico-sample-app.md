@@ -1,10 +1,50 @@
 # Ingenico Sample App
 
-`ingenico-app/` (`com.mooney.mdm.ingenico`): an app which brings an Ingenico terminal from the factory state to operative by itself. The user only opens it (and, with no network, chooses the WiFi network and types its password). It shows how an app such as a payment app can do the whole initialization; the [sample app](../README.md) instead has one button per step.
+`ingenico-app/` (application ID `com.mooney.mdm.ingenico`) is an app which brings an Ingenico terminal from the factory state to operative **by itself**. The user only opens it, and, when there is no network, chooses the WiFi network and types its password. Everything else (starting the MDM launcher, its enrollment, the installation of the apps) happens without the user.
 
-Needs MDM launcher **6.54** or later (before its enrollment the launcher keeps its startup update open, see [Startup sync](startup-sync.md)).
+It is a reference for apps, such as a payment app, which have to do the same: the code is small and commented, and [Doing the same in your app](#doing-the-same-in-your-app) lists what to copy. The [sample app](../README.md#sample-app) shows the same pieces with one button per step, for testing them one at a time.
 
-## What it does at start
+Contents:
+
+- [Requirements](#requirements)
+- [Deployment](#deployment)
+- [What the app does](#what-the-app-does)
+- [Screens](#screens)
+- [How it works](#how-it-works)
+- [Doing the same in your app](#doing-the-same-in-your-app)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+- [Limits](#limits)
+- [Build](#build)
+
+## Requirements
+
+| What | Why |
+|---|---|
+| Ingenico terminal with Android 10 (tested: EX6000) | The WiFi method relies on Android 10 rules, see [WiFi setup](wifi-setup.md). |
+| MDM launcher `com.hmdm.launcher.ingenico` **6.54** or later, installed | Before its enrollment, 6.54 keeps its startup update open: the WiFi setup can take as long as needed and the apps are still installed in the same boot. With older launchers the apps may wait for one more reboot. |
+| The launcher's enrollment settings in its APK (`init.json`, Ingenico flavor) | The launcher enrolls by itself when its main screen opens: server, project, device ID from the serial number. |
+| The app **targets SDK 28** | Android 10 lets only apps targeting SDK 28 or lower add a WiFi network (`WifiManager.addNetwork()`). See [Limits](#limits). |
+| hmdm library 1.2.2 (`app/libs/hmdm-1.2.2.aar`) | Connection to the launcher and startup gate. 1.2.2 or later: earlier versions crash when the launcher has no configuration yet. |
+| `mdmlib` (this repository) | Only for **Change device number**. |
+
+The Ingenico USDK is not used, so any signing key works. The build uses the launcher's key when it is configured (see [Build](#build)).
+
+## Deployment
+
+On a terminal fresh from the factory:
+
+1. **Install** the launcher and the app (by the factory, the staging tool, or adb for tests). Neither has to be started: both are in the stopped state.
+2. **On the MDM server**, in the configuration the launcher enrolls into:
+   - add the app `com.mooney.mdm.ingenico` with its APK uploaded, and mark it **Run at boot**, so the launcher starts it at every boot once the startup update is over;
+   - add the other apps the terminal needs; they are installed by the first startup update.
+3. **The user opens the app** from the home screen. Nothing else can start it the first time: the launcher doesn't know the app yet (it has no configuration), and a stopped app receives no boot broadcast.
+
+From then on the launcher starts the app at every boot (*Run at boot*), and the app waits at the startup gate until the app updates are installed.
+
+> If the configuration marks another app as *Run at boot*, the launcher opens that one on top when the startup update ends. In the tests on the EX6000 the configuration still had the sample app (`com.mooney.mdm.sample`), which was installed and opened over this app.
+
+## What the app does
 
 ```mermaid
 flowchart TD
@@ -21,47 +61,185 @@ flowchart TD
     class A,E user
 ```
 
-- **Agent not running**: the launcher is not enrolled (`ERROR_NOT_CONFIGURED`, new device), or it is in the stopped state (never run, or force-stopped: it missed the boot). The app initializes the device: WiFi if needed, then it starts the launcher's main screen, which enrolls it (if needed) and runs its startup update.
-- **Agent running**: nothing to start; the app goes straight to the startup gate.
-- **Startup gate**, in both cases: the app waits until the launcher has installed the app updates of this boot, because installing an app kills it; it shows the downloads and installs. The gate always opens (end of the startup update, or a timeout).
-- **Ready**: server and device number. If the app initialized the agent, it reconnects to read the data of the enrolled launcher.
+🟦 Blue blocks, marked 👆: the only steps which need the user.
 
-## WiFi
+| Situation at start | What the app does |
+|---|---|
+| New device: launcher not enrolled, no network | WiFi screen → network added → launcher started (it enrolls, loads the configuration, installs the apps) → startup gate → ready |
+| New device, network already there (for example Ethernet, or WiFi set by the factory) | Launcher started → startup gate → ready |
+| Launcher enrolled but in the stopped state (force-stopped: it missed the boot and its startup update) | Launcher started, which runs its startup update → startup gate → ready |
+| Launcher running (normal boot, or the app reopened during the day) | Startup gate only: waits if the startup update is still running, otherwise opens at once → ready |
+| No launcher installed, or no answer from it within 15 s | Ready, with "MDM agent not installed" / "not available"; no MDM buttons |
 
-With `WifiManager.addNetwork()`: the app targets **SDK 28**, the only way Android 10 allows it to an ordinary app (see [WiFi setup](wifi-setup.md#addnetwork-from-an-app-targeting-sdk-28)). No prompt, no reboot, any signing key. The network belongs to the app: Android removes it if the app is uninstalled. Whether production terminals accept an app targeting SDK 28 is still to be confirmed.
+## Screens
 
-The WiFi screen lists the access points nearby (strongest first, **Scan** searches again); WPA/WPA2 personal and open networks. From the ready screen, **Configure WiFi** opens it again (with **Cancel**).
+**Progress.** A title with the current step (*Connecting to the MDM agent*, *Starting the MDM agent*, *Synchronizing with the MDM agent*), a detail line (for example *Downloading com.hmdm.pager*, *Installing …*), a progress bar (with the download percentage while the launcher downloads an app), and below a log of what the app did, with times. The same lines go to logcat with the tag `IngenicoSample`.
 
-## Ready screen
+**Configure WiFi.** Shown when the launcher has to be started and there is no network, or from the ready screen.
+
+- The access points nearby, strongest first, with signal and lock; **Scan** searches again (Android allows about 4 scans every 2 minutes). Tap one to choose it.
+- Network name (filled by the list, or typed for a hidden network), password, *Show password*.
+- **Connect**: the network is added and the app waits for the connection with internet; after 20 s without it, it suggests checking the password and the signal. Then it goes on by itself.
+- WPA/WPA2 personal and open networks (empty password); enterprise networks are marked "not supported".
+- **Cancel**: only when opened from the ready screen.
+
+**Ready.** The app's normal work would start here.
 
 | Button | What it does |
 |---|---|
-| **Get device number** | Reconnects to the MDM agent, which reads its configuration again, and shows the server and device number. |
-| **Change device number** | Asks the MDM server username and password, a new device number and/or groups (comma-separated, empty = unchanged), and updates the device through the server's REST API (`mdmlib`, `MdmService.changeDevice()`), like the sample app. On a rename the server sends the device a `configUpdated` push; when the launcher has reloaded its configuration, the app reads the device number again. The password is never logged. |
-| **Sync configuration** | Asks the launcher to load its configuration now (`forceConfigUpdate()`); waits for its `configUpdated` broadcast, at most 90 s. |
-| **Configure WiFi** | The WiFi screen. |
+| **Get device number** | Reconnects to the MDM agent, which reads its configuration again, and shows the server and the device number. |
+| **Change device number** | Asks the MDM server username and password, a new device number and/or groups (comma-separated; empty = unchanged), and updates the device on the server through its REST API (`mdmlib`, `MdmService.changeDevice()`), as in the sample app. On a rename the server sends the device a `configUpdated` push; when the launcher has reloaded its configuration, the app reads the device number again by itself. The MDM user needs the `rename_device` permission. The password is never logged. |
+| **Sync configuration** | Asks the launcher to load its configuration now (`forceConfigUpdate()`), and shows *Syncing configuration…* until the launcher's `configUpdated` broadcast, at most 90 s (the launcher reports only successful updates). Settings and policies are applied now; app installs and removals wait for the next boot. |
+| **Configure WiFi** | The WiFi screen, to change the network. |
 
-## Tested on the EX6000 (development terminal)
+## How it works
 
-Launcher 6.54 and the app installed through adb, never run; no saved network in range:
+Code: [`MainActivity`](../ingenico-app/src/main/java/com/rch/mdm/ingenico/MainActivity.java) (states and screens), [`WifiSetup`](../ingenico-app/src/main/java/com/rch/mdm/ingenico/WifiSetup.java) (addNetwork), [`LauncherStarterActivity`](../ingenico-app/src/main/java/com/rch/mdm/ingenico/LauncherStarterActivity.java) (starts the launcher).
+
+States, in order: `CONNECTING` → (`WIFI`) → (`STARTING_AGENT`) → `SYNCHRONIZING` → `READY`.
+
+### 1. Is the agent running?
+
+- **Stopped state**, read with `ApplicationInfo.FLAG_STOPPED` **before** connecting: binding to the launcher's service takes it out of the stopped state, so afterwards it can't be told any more. An app is stopped after its installation until something starts it, and after *Force stop*; a stopped app receives no broadcasts, so a stopped launcher missed the boot.
+- **Enrollment**, after the connection (`HeadwindMDM.connect()` → `onHeadwindMDMConnected()`): `getMdmAgentError() == MDMError.ERROR_NOT_CONFIGURED` means the launcher has no configuration yet.
+- Stopped or not enrolled → *not running*: the app has to start it. A reconnection later (the launcher restarts when it updates itself) doesn't run this decision again.
+
+Connecting starts the launcher's process in the background (its plugin service), but not its enrollment: that runs only in its main screen.
+
+### 2. WiFi
+
+Only if there is no network with validated internet (`NET_CAPABILITY_VALIDATED`). `WifiSetup.addNetwork()`:
+
+```java
+WifiConfiguration conf = new WifiConfiguration();
+conf.SSID = "\"" + ssid + "\"";
+conf.preSharedKey = "\"" + password + "\"";                       // empty password: KeyMgmt.NONE
+conf.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);  // required on Ingenico
+int netId = wifiManager.addNetwork(conf);                          // -1 = refused
+wifiManager.enableNetwork(netId, true);
+```
+
+- An earlier network of the app with the same name is removed first (Android refuses a duplicate).
+- Without the key management, Ingenico's `WifiManager` refuses the configuration (`not support type: 0`).
+- Then a `NetworkCallback` waits for a WiFi network with validated internet.
+- The network is an ordinary saved network, kept across reboots, but it **belongs to the app**: Android removes it if the app is uninstalled, and only the app can change it. A network with the same name saved in the settings (or by another app) makes `addNetwork` fail: forget it there first.
+
+Details and tests: [WiFi setup](wifi-setup.md#addnetwork-from-an-app-targeting-sdk-28).
+
+### 3. Starting the launcher
+
+The app starts the launcher's main activity (`getLaunchIntentForPackage()`, or its HOME activity), which enrolls it (`init.json`) and starts its configuration update, and then brings itself back to the front:
+
+- the launcher is started from `LauncherStarterActivity`, an invisible activity which finishes at once;
+- in `onStop()` (the launcher's screen is up) the app restarts itself with `FLAG_ACTIVITY_REORDER_TO_FRONT`. Android 10 lets an app in the background start an activity only shortly after one of its activities finished: that's why the launcher is started from the short-lived activity;
+- the launcher's screen shows at most for a moment; its work goes on in the background.
+
+If the launcher's screen doesn't start (`onResume()` without `onStop()`), the app logs it and goes on to the startup gate. Details: [Starting the MDM launcher](start-launcher.md).
+
+### 4. Startup gate
+
+`HeadwindMDM.awaitStartupUpdate()`: the launcher answers when its **startup update** (the first configuration update of the boot, the only one which installs and removes apps) is over. Until then the app doesn't start its work, because installing an app kills it — this app included, if the configuration has a new version of it.
+
+- In *not running* the app calls it only **after** starting the launcher, so the library's safety timeout (3.5 min) doesn't run during the WiFi setup.
+- The listener reports the progress: `onAppDownloading`, `onDownloadProgress`, `onAppInstalling`, `onAppRemoving`.
+- `onReady(reason)`: `STARTUP_READY` (startup update over), `STARTUP_TIMEOUT` (no answer within 3.5 min), `STARTUP_NO_MDM`. All mean "start working": the gate never blocks the app.
+- If the app is killed by its own update, the launcher starts the new version (*Run at boot* or *Run after install*); it finds the agent running and the gate opens at once.
+
+Details: [Startup sync](startup-sync.md).
+
+### 5. Ready
+
+If the app started the agent, it reconnects to read the data of the enrolled launcher (the data read at the first connection was from before the enrollment), then shows the server and the device number.
+
+## Doing the same in your app
+
+1. **Manifest:** `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`, `ACCESS_FINE_LOCATION` (network list; the Ingenico firmware grants it at install); `<queries>` for `com.hmdm.launcher` and `com.hmdm.launcher.ingenico`; the launch activity `singleTask` (the launcher's *Run at boot* then brings back the existing screen); `LauncherStarterActivity` translucent, `noHistory`, `excludeFromRecents`.
+2. **Gradle:** `targetSdk 28`, and in `lint` disable `ExpiredTargetSdkVersion` and `OldTargetApi`; the hmdm library 1.2.2 or later.
+3. **At start:** read the stopped state, connect, decide in `onHeadwindMDMConnected()` (section [1](#1-is-the-agent-running)).
+4. **Not running:** WiFi if there is no validated network ([2](#2-wifi)), start the launcher and come back ([3](#3-starting-the-launcher)), then the startup gate.
+5. **Running:** the startup gate only ([4](#4-startup-gate)).
+6. **Don't** request a configuration sync before the launcher is enrolled (it fails: no device ID yet) or during the startup update (it would start a second update in parallel).
+7. **Never log** the WiFi or MDM passwords.
+
+`MainActivity` holds all of it; copy `WifiSetup` and `LauncherStarterActivity` as they are.
+
+## Testing
+
+### From the factory state
+
+```bash
+# Remove the apps (the network added by the app goes with it)
+adb uninstall com.mooney.mdm.ingenico
+adb uninstall com.hmdm.launcher.ingenico
+adb uninstall com.hmdm.pager               # and the other apps the configuration installs
+# Forget any other saved network for the test WiFi in the settings, then:
+adb install hmdm-launcher-ingenico-release-6.54.apk
+adb install ingenico_sample_app-1.0-debug.apk
+adb shell dumpsys package com.hmdm.launcher.ingenico | grep stopped   # stopped=true
+adb logcat -c
+```
+
+Open the app on the terminal, choose the network, **Connect**, and follow:
+
+```bash
+adb logcat -v time | grep -E "IngenicoSample|Startup update|Run at boot|Configuration updated|installed successfully"
+```
+
+Run on the EX6000 (development terminal), launcher 6.54, no saved network in range:
 
 | Time | Event |
 |---|---|
 | 19:31:05 | App opened: `MDM agent not running (not enrolled)`, `No network: configure WiFi` |
 | 19:31:35 | Network chosen, password typed, **Connect**: `network RUT200_FA74 added` |
-| 19:31:39 | Connected with internet; the app starts the launcher and comes back to the front; startup gate waiting |
+| 19:31:39 | `connected to RUT200_FA74 with internet`; the app starts the launcher, `back to the front`; startup gate waiting (launcher: `Startup update awaited before the enrollment, timeout not started`) |
 | 19:31:41 | Launcher: enrolled, `Configuration updated` |
-| 19:31:42–52 | Startup update installs `com.hmdm.pager` and `com.mooney.mdm.sample`; the app shows the progress |
-| 19:31:53 | `Startup update completed`, the app: `Operative`, device number shown |
+| 19:31:42–52 | Startup update installs `com.hmdm.pager` and `com.mooney.mdm.sample`; the app shows each download and install |
+| 19:31:53 | `Startup update completed`; the app: `Startup gate: open`, `Operative`, device number shown |
 
-Started again with the agent running: `MDM agent running`, gate open at once, operative.
+18 s from **Connect** to operative, no reboot.
 
-To be started by the launcher at boot, and to be installed by it, add the app to the configuration on the MDM server (*Run at boot*) and upload its APK.
+### Agent running
+
+```bash
+adb shell am force-stop com.mooney.mdm.ingenico
+adb shell am start -n com.mooney.mdm.ingenico/com.rch.mdm.ingenico.MainActivity
+```
+
+Expected (tested): `MDM agent running`, `Startup gate: open, startup update over`, `Operative`. After a reboot, opened while the launcher's startup update is still running, the gate waits and shows the installs (the same gate code as the sample app, tested there).
+
+### Launcher force-stopped
+
+`adb shell am force-stop com.hmdm.launcher.ingenico`, then open the app: `MDM agent not running (stopped)`, the launcher is started, then the startup gate.
+
+## Troubleshooting
+
+| Symptom | Cause, what to do |
+|---|---|
+| `FAILED to add the network … (refused by Android)` | A network with that name was saved in the settings or by another app: forget it there and retry. Or the app doesn't target SDK 28 (`addOrUpdateNetwork not allowed` in the log). |
+| "Not connected yet … Check the password" | Wrong password, network out of range, or no internet behind the access point (the app waits for validated internet). |
+| Empty network list | Location turned off, or no location permission: type the network name. Android also limits how often apps scan: retry **Scan** later. |
+| Stays on *Synchronizing with the MDM agent* | The launcher is installing apps (see the detail line). The gate opens at the latest after 3.5 min. |
+| Ready, but the apps weren't installed | Launcher older than 6.54 (the startup update ended before the enrollment), or no network when the launcher loaded its configuration: reboot, the next startup update installs them. |
+| "MDM agent not enrolled" on the ready screen | The launcher couldn't enroll (no network, enrollment settings missing in its APK): check the launcher's log (`HeadwindMDM`). |
+| Another app opens on top when the startup update ends | That app is marked *Run at boot* in the configuration. |
+| **Change device number** fails with HTTP 401/403 | Wrong credentials, or the MDM user lacks the `rename_device` permission. |
+| **Sync configuration**: "no answer from the agent within 90 s" | The update failed (network or server error): the launcher reports only successful updates. |
+
+## Limits
+
+- **targetSdk 28 on production terminals: to confirm.** The tests ran on a development terminal (`ro.epay.devmode=1`). Whether Ingenico's app validation for production terminals accepts an APK targeting SDK 28 is not known yet; see [Production terminals](wifi-setup.md#production-terminals). The alternative which needs no targetSdk 28 is Ingenico WiFi auto through the USDK, with a reboot ([WiFi setup](wifi-setup.md#ingenico-wifi-auto)).
+- targetSdk 28 gives the whole app the Android 9 behaviour (storage, background limits, permissions); not for the Play Store.
+- The WiFi network belongs to the app: uninstalling it removes the network.
+- One network at a time, WPA/WPA2 personal or open; no enterprise (EAP) networks.
+- The start of the launcher's screen and the return to the front were tested on Android 10; on Android 14 and later the launcher may stay in front (see [Starting the MDM launcher](start-launcher.md)).
 
 ## Build
 
 ```bash
-./gradlew :ingenico-app:assembleDebug
+./gradlew :ingenico-app:assembleDebug        # or assembleRelease
 ```
 
-APK: `ingenico-app/build/outputs/apk/debug/ingenico_sample_app-<version>-debug.apk`. Signed with the launcher's key when the `RELEASE_M10_*` properties are set in `~/.gradle/gradle.properties`, otherwise with the debug key. It uses the hmdm library of the sample app (`app/libs/hmdm-1.2.2.aar`) and `mdmlib`; not the Ingenico USDK.
+APK: `ingenico-app/build/outputs/apk/<type>/ingenico_sample_app-<version>-<type>.apk`.
+
+- Signed with the launcher's key when `RELEASE_M10_STORE_FILE`, `RELEASE_M10_KEY_ALIAS`, `RELEASE_M10_STORE_PASSWORD` and `RELEASE_M10_KEY_PASSWORD` are set in `~/.gradle/gradle.properties`, otherwise with the debug key. An APK signed with another key can't update an installed one: uninstall first.
+- Uses `app/libs/hmdm-1.2.2.aar` (shared with the sample app) and the `mdmlib` module; not the Ingenico USDK.
