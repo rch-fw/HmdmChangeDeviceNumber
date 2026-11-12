@@ -1,6 +1,8 @@
 # Startup sync with the MDM launcher
 
-How a kiosk app waits for the Headwind MDM launcher to finish its app updates before it lets the user work.
+How an app (for example a payment app) waits for the Headwind MDM launcher to finish its app updates before it lets the user work.
+
+On the Ingenico terminals the launcher is **not in kiosk mode** and is not the home screen: the Ingenico launcher is the home screen, the user opens the apps from it, and the MDM launcher works in the background. It starts the apps marked *Run at boot* when the startup update is over (launcher 6.52 or later, see [Starting apps at boot](#starting-apps-at-boot)).
 
 ## Why
 
@@ -8,24 +10,25 @@ When the launcher installs a new version of an app, or removes it, Android kills
 
 So the launcher installs and removes apps **only during the startup update**: the first configuration update after the device boots. Configuration updates later in the day (push, the periodic check, the update button, plugin calls) apply everything else (settings, policies, files, remote commands) but leave app installs and removals for the next boot. This is on by default and can be turned off per configuration (see [Configuration option](#configuration-option)).
 
-At boot the kiosk app may already be running while the launcher installs updates (the launcher starts the kiosk app as soon as it starts). The kiosk app therefore asks the launcher whether the startup update is over and waits until it is: the **startup gate**. While it waits it is idle, so if the launcher replaces it, nothing is lost.
+At boot the app may already be running while the launcher installs updates: the user can open it from the home screen before the startup update is over. The app therefore asks the launcher whether the startup update is over and waits until it is: the **startup gate**. While it waits it is idle, so if the launcher replaces it, nothing is lost.
 
 ## How it works
 
 ```mermaid
 sequenceDiagram
     participant L as MDM launcher
-    participant A as Kiosk app
-    Note over L: device boots
-    L->>A: starts the kiosk app
+    participant A as App
+    Note over L: device boots, startup update starts
+    Note over A: the user opens the app<br/>from the home screen
     A->>L: connect, awaitStartupUpdate()
     L-->>A: false: startup update running
     Note over A: wait screen, no transactions
     L->>L: load configuration
     L-->>A: onAppDownloading / onAppInstalling (progress)
-    Note over L,A: if the kiosk app itself is updated, Android kills it<br/>and the launcher starts the new version, which asks again
+    Note over L,A: if the app itself is updated, Android kills it<br/>and the launcher starts the new version (Run after install), which asks again
     L-->>A: onAllAppInstallComplete
     Note over A: onReady(STARTUP_READY): normal operation
+    Note over L,A: if the app wasn't open: Run at boot starts it now, the gate opens at once
 ```
 
 What the launcher guarantees:
@@ -79,7 +82,7 @@ Both flags are only about starting apps. When apps are *installed* is decided by
 
 ## Integration
 
-Put the gate in the app's **launch activity** (the one with the `MAIN`/`LAUNCHER` intent filter, which the launcher starts in kiosk mode). Keep everything which must not be interrupted disabled until `onReady()`.
+Put the gate in the app's **launch activity** (the one with the `MAIN`/`LAUNCHER` intent filter, which the user opens from the home screen and the launcher starts with *Run at boot* / *Run after install*). Keep everything which must not be interrupted disabled until `onReady()`.
 
 ```java
 public class MainActivity extends AppCompatActivity implements HeadwindMDM.EventHandler {
@@ -146,8 +149,8 @@ The complete example is in [`MainActivity.java`](../app/src/main/java/com/rch/md
 
 1. **Nothing which must not be interrupted before `onReady()`**: no payments, no writes which leave data half done. Reading data and showing a screen is fine.
 2. **Call it on every start of the launch activity**, not only at boot. After boot the answer comes back immediately, so it costs nothing, and the app doesn't have to know whether it was started by a boot.
-3. **Expect to be killed while waiting.** If the launcher updates the app, the process dies and the launcher starts the new version, which calls `awaitStartupUpdate` again and gets "over" at once. Don't save anything while waiting that a kill would leave half done.
-4. **Don't wait in a boot receiver.** Since Android 10 an app can't start an activity from the background, so a `BOOT_COMPLETED` receiver which opens the app's UI doesn't work reliably. In kiosk mode the launcher starts the app after boot; the gate in the launch activity covers that start. If the app has a boot receiver for other work (for example to start a service), that work must follow the same rule 1, or wait for the gate too.
+3. **Expect to be killed while waiting.** If the launcher updates the app, the process dies; the launcher starts the new version if the app is marked *Run after install* or *Run at boot* (otherwise the user opens it again), and it calls `awaitStartupUpdate` again and gets "over" at once. Don't save anything while waiting that a kill would leave half done.
+4. **Don't wait in a boot receiver.** Since Android 10 an app can't start an activity from the background, so a `BOOT_COMPLETED` receiver which opens the app's UI doesn't work reliably. To have the app started after boot, mark it *Run at boot* in the configuration: the launcher starts it when the startup update is over; the gate in the launch activity covers that start, and a start by the user from the home screen too. If the app has a boot receiver for other work (for example to start a service), that work must follow the same rule 1, or wait for the gate too.
 5. **Don't call `forceConfigUpdate()` to "speed up" the startup update**: it starts a second configuration update in parallel. During the day it updates the configuration but doesn't install apps.
 
 ## Lower-level API
@@ -205,7 +208,7 @@ Device connected with `adb`. Launcher and sample app log together (the sample's 
 
 | Test | Steps | Expected |
 |---|---|---|
-| Update pending at boot | Release a new version of the kiosk app in the configuration, then `adb reboot`. | The app shows the wait screen, the launcher installs the new version, the new version starts and opens the gate (`STARTUP_READY`). |
+| Update pending at boot | Release a new version of the app in the configuration, then `adb reboot`. | The app shows the wait screen, the launcher installs the new version, the new version starts and opens the gate (`STARTUP_READY`). |
 | Nothing to update | `adb reboot` with no change in the configuration. | The gate opens within a few seconds. |
 | Update during the day | Release a new version without rebooting (default setting). | The running app isn't killed; the log shows `app update(s) deferred to the next boot`; the update is installed at the next reboot. |
 | Option turned off | Uncheck **Install app updates only at device startup**, save, then release a new version. | The update is installed right away, without a reboot (the running app is killed). |
