@@ -149,8 +149,9 @@ now (`HeadwindMDM.forceConfigUpdate()`), for example after the network has been 
   the log shows "Configuration sync completed".
 - The launcher reports only successful updates: on a network error it retries 6 times every 10 s
   and gives up silently. So the app stops waiting after 90 s and logs "no answer from the launcher".
-- After **Configure WiFi** no sync is needed: the reboot runs the startup update, which also installs
-  the apps. See [WiFi setup](docs/wifi-setup.md#sync-request-availability) for the sync APIs.
+- After **Configure WiFi** with the Ingenico USDK no sync is needed: the reboot runs the startup
+  update, which also installs the apps. After an Android suggestion connected, the WiFi screen offers
+  this sync. See [WiFi setup](docs/wifi-setup.md#sync-request-availability) for the sync APIs.
 
 ### Reboot button
 
@@ -215,32 +216,35 @@ Notes:
 
 The **Configure WiFi** button opens a screen to set the WiFi network without the system settings,
 for example on a device fresh from the factory with no network. Choose the network from the list of
-access points nearby (strongest first; **Scan** searches again) or type its name, enter the
-WPA/WPA2 password, then press **Save and reboot** (Ingenico USDK mode, the default):
+access points nearby (strongest first; **Scan** searches again) or type its name, enter the password,
+and pick one of two methods (the choice is saved):
 
-1. the app saves the network through the Ingenico USDK "WiFi auto" settings
-   (`UNetWorkManager.setWifiAutoSSID` / `setWifiAutoPasswd` / `setWifiAutoEnabled`);
-2. it reboots the device through the USDK (`UDeviceManager.reboot()`);
-3. at boot the system creates a saved WiFi network with those settings and connects to it;
-4. the MDM launcher's startup update then loads the configuration and installs the apps as usual.
+- **Ingenico USDK**, **Save and reboot**: the app saves the network in the Ingenico "WiFi auto"
+  settings (`UNetWorkManager.setWifiAutoSSID` / `setWifiAutoPasswd` / `setWifiAutoEnabled`) and
+  reboots through the USDK (`UDeviceManager.reboot()`). At boot the system creates a saved WiFi
+  network and connects; the MDM launcher's startup update then loads the configuration and installs
+  the apps as usual. No user action; needs the Ingenico-approved key; the settings apply only at boot.
+- **Android suggestion**, **Connect**: the app suggests the network
+  (`WifiManager.addNetworkSuggestions()`); Android connects a few seconds after the user allows it in
+  the notification shade, without a reboot. Any signing key. Then the screen offers **Sync
+  configuration** (the launcher loads its configuration now) and **Reboot** (the startup update
+  installs the apps).
 
-The settings are applied only at boot: without the reboot the device doesn't connect. Once
-created, the saved network stays even if the app is uninstalled.
+Where the USDK is not available or refuses the calls, only the Android suggestion can be selected.
+See [WiFi setup on Ingenico terminals](docs/wifi-setup.md) for a comparison of the two methods.
 
-"WiFi auto" stays on: Ingenico's system service applies it again at every boot, and recreates the
-network even after it is forgotten in the settings. **Reset WiFi setup** turns it off and clears its
-network and password (`UsdkWifi.reset()`), and removes the app's Android suggestions. To reproduce a
-device fresh from the factory: press **Reset WiFi setup**, then forget the network in the settings.
-
-The screen has a second mode, **Android suggestion** (`WifiManager.addNetworkSuggestions()`):
-**Connect** works without a reboot and without the Ingenico key, once the user allows the suggestion
-in the notification shade; then the screen offers **Sync configuration** and **Reboot**. It is used
-automatically when the USDK is not available. See [WiFi setup](docs/wifi-setup.md#network-suggestions).
+A network saved through WiFi auto stays even if the app is uninstalled, and "WiFi auto" stays on:
+Ingenico's system service applies it again at every boot, recreating the network even after it is
+forgotten in the settings. A suggested network belongs to the app. **Reset WiFi setup** turns WiFi
+auto off, clears its network and password (`UsdkWifi.reset()`), and removes the app's suggestions. To
+reproduce a device fresh from the factory: press **Reset WiFi setup**, then forget the network in the
+settings.
 
 - The network list needs the location permission and the location turned on (Android 10 scan
   results). The Ingenico firmware grants the permission at install, so no dialog is shown. Android
-  limits scans to about 4 every 2 minutes: a refused scan keeps the last results. Open and
-  enterprise (EAP) networks are marked "not supported": "WiFi auto" takes a WPA/WPA2 password.
+  limits scans to about 4 every 2 minutes: a refused scan keeps the last results. Networks a method
+  can't use are marked "not supported": enterprise (EAP) networks, and open networks with the
+  Ingenico USDK ("WiFi auto" takes a WPA/WPA2 password).
 - The button is always shown, not tied to the startup gate: without a network the gate stays
   closed until the launcher gives up loading the configuration.
 - The USDK accepts these calls only from apps signed with an Ingenico-approved key. The build signs
@@ -254,4 +258,4 @@ automatically when the USDK is not available. See [WiFi setup](docs/wifi-setup.m
   launcher repo (mooney-mdm-agent), or from the Ingenico USDK, to `app/libs/`. Without it the build
   stops with a message saying so. The `mdmlib` library doesn't need it.
 - Code: `WifiActivity`, `UsdkWifi`. See [WiFi setup on Ingenico terminals](docs/wifi-setup.md) for
-  how "WiFi auto" works, why the reboot is needed and why no sync request is needed after it.
+  how the two methods work, when a reboot or a sync request is needed, and the tests on the EX6000.
