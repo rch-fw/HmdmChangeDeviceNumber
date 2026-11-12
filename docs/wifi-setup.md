@@ -157,7 +157,7 @@ Four procedures: the MDM launcher or the kiosk app (sample app) started first, e
 
 **Operative** means: WiFi connected, the launcher enrolled with its configuration loaded, the apps of the configuration installed, the sample app's startup gate open.
 
-> 🟥 **Red blocks: about 60 s of delay.**
+> 🟥 **Red blocks: about 60 s of delay.** Each is marked ① in the chart and explained by the ① note right below it.
 
 In the charts, the blocks in **red** are where the launcher's configuration retries add about **60 s** (6 retries every 10 s with no network). During them the user can go on (the WiFi screen doesn't wait), but the startup gate stays closed until they end. Procedures 3 and 4, as charted, have no such block: the launcher is enrolled only when the network is already there (or, in 3, after the reboot).
 
@@ -171,7 +171,7 @@ What decides the steps:
 ```mermaid
 flowchart TD
     A[Start the MDM launcher<br/>from the app list] --> B[Launcher enrolls<br/>device ID from the USDK serial]
-    B --> C[Configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
+    B --> C[🟥 ① Configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
     C --> D[Startup update ends without configuration]
     D --> E[Go to the home screen, open the sample app]
     E --> F[Startup gate open<br/>'MDM launcher not configured yet']
@@ -184,16 +184,19 @@ flowchart TD
     L --> M([Operative])
     classDef delay60 fill:#f8d7da,stroke:#c0392b,stroke-width:2px,color:#000
     class C delay60
+    C -.- N1>"① see the note below the chart"]
+    class N1 note60
+    classDef note60 fill:#fff,stroke:#c0392b,stroke-dasharray:4 3,color:#c0392b
 ```
 
-> 🟥 **About 60 s of delay** (red block): the launcher was started without a network, so its configuration request is retried 6 times every 10 s before the startup update ends. The startup gate stays closed meanwhile; **Configure WiFi** doesn't need to wait.
+> 🟥 **① About 60 s of delay** (red block ① in the chart): the launcher was started without a network, so its configuration request is retried 6 times every 10 s before the startup update ends. The startup gate stays closed meanwhile; **Configure WiFi** doesn't need to wait.
 
 ### 2. Launcher first, WiFi through a network suggestion
 
 ```mermaid
 flowchart TD
     A[Start the MDM launcher<br/>from the app list] --> B[Launcher enrolls<br/>device ID from the USDK serial]
-    B --> C[Configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
+    B --> C[🟥 ① Configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
     C --> D[Startup update ends without configuration]
     D --> E[Go to the home screen, open the sample app]
     E --> F[Startup gate open<br/>'MDM launcher not configured yet']
@@ -211,9 +214,12 @@ flowchart TD
     O --> P
     classDef delay60 fill:#f8d7da,stroke:#c0392b,stroke-width:2px,color:#000
     class C delay60
+    C -.- N1>"① see the note below the chart"]
+    class N1 note60
+    classDef note60 fill:#fff,stroke:#c0392b,stroke-dasharray:4 3,color:#c0392b
 ```
 
-> 🟥 **About 60 s of delay** (red block): the launcher was started without a network, so its configuration request is retried 6 times every 10 s before the startup update ends. **Sync configuration** appears only after it, when the startup gate opens; **Configure WiFi** and **Connect** don't need to wait.
+> 🟥 **① About 60 s of delay** (red block ① in the chart): the launcher was started without a network, so its configuration request is retried 6 times every 10 s before the startup update ends. **Sync configuration** appears only after it, when the startup gate opens; **Configure WiFi** and **Connect** don't need to wait.
 
 ### 3. Sample app first, WiFi through the Ingenico USDK
 
@@ -285,7 +291,7 @@ Both are counted once per boot, and the WiFi screen doesn't wait for either: it 
 flowchart TD
     A[Open the sample app] --> B['MDM launcher not configured yet'<br/>Start MDM launcher shown]
     B --> C[Start MDM launcher<br/>sample app comes back to the front]
-    C --> D[Launcher enrolls<br/>configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
+    C --> D[🟥 ① Launcher enrolls<br/>configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
     D --> E[Configure WiFi, Ingenico USDK<br/>choose the network, password]
     E --> F[Save and reboot<br/>WiFi auto saved, USDK reboot]
     F --> G[Boot: system creates the saved network, connects]
@@ -295,9 +301,12 @@ flowchart TD
     J --> K([Operative])
     classDef delay60 fill:#f8d7da,stroke:#c0392b,stroke-width:2px,color:#000
     class D delay60
+    D -.- N1>"① see the note below the chart"]
+    class N1 note60
+    classDef note60 fill:#fff,stroke:#c0392b,stroke-dasharray:4 3,color:#c0392b
 ```
 
-> 🟥 **About 60 s of delay** (red block), but harmless: it happens in the first boot, before **Save and reboot**, and only keeps the startup gate closed. After the reboot nothing waits.
+> 🟥 **① About 60 s of delay** (red block ① in the chart), but harmless: it happens in the first boot, before **Save and reboot**, and only keeps the startup gate closed. After the reboot nothing waits.
 
 After the reboot no step depends on the user, so no timeout can be missed: this is procedure 1 started from the sample app. With WiFi through the Ingenico USDK, the best procedure is therefore always: **enroll the launcher first** (start it, or **Start MDM launcher**), then **Save and reboot**.
 
