@@ -13,7 +13,7 @@ On Android 10 (Ingenico EX6000) an ordinary app can no longer add a WiFi network
 | Way | Result |
 |---|---|
 | `WifiManager.addNetwork()` / `enableNetwork()` | **Refused** (`addNetwork` returns -1): only device owner and system apps may use them with targetSdk 29+. |
-| `WifiManager.addNetworkSuggestions()` | Accepted, but Android asks the user to allow the suggestions (notification) and connects when it decides to. The network is removed with the app. |
+| `WifiManager.addNetworkSuggestions()` | **Works after the user approves** a notification, no reboot (see [Network suggestions](#network-suggestions)). The network is removed with the app. |
 | `WifiNetworkSpecifier` | The connection belongs to the app only: the launcher can't use it to reach the server. |
 | Settings WiFi panel | Works, but it is the system settings screen. |
 | **Ingenico USDK "WiFi auto"** | **Works**, at the next boot (see below). |
@@ -109,6 +109,43 @@ Rules:
 - On a network error the launcher retries 6 times every 10 s before giving up.
 
 The sample app's **Sync configuration** button uses `HeadwindMDM.forceConfigUpdate()`: it is shown once the startup gate is open, and shows "Syncing configuration, please wait" until the launcher's `configUpdated` broadcast, or for at most 90 s, because the launcher sends nothing when the update fails. `ConfigUpdateListener` would report the errors as well.
+
+## Network suggestions
+
+`WifiManager.addNetworkSuggestions()` is the Android 10 API for ordinary apps. Tested on the EX6000 with a test app (no USDK, works with any signing key), WiFi auto off, no saved network:
+
+```java
+WifiNetworkSuggestion suggestion = new WifiNetworkSuggestion.Builder()
+        .setSsid(ssid)
+        .setWpa2Passphrase(password)
+        .setIsAppInteractionRequired(true)     // POST_CONNECTION broadcast to the app
+        .build();
+int status = wifiManager.addNetworkSuggestions(Collections.singletonList(suggestion));
+```
+
+| Step | Result |
+|---|---|
+| `addNetworkSuggestions()` | Accepted (status 0). Android posts the notification "Allow suggested Wi‑Fi networks?" |
+| 60 s without approving | Not connected (`dumpsys wifi`: `Has user approved: false`) |
+| Approval | The notification is filed under **Silent notifications**, collapsed: the user has to open the notification shade and expand it to see **Allow** / **No thanks** |
+| **Allow** tapped (12:57:21.997) | `Has user approved: true` |
+| 12:57:29.946 | Connected, 8 s after Allow (`ACTION_WIFI_NETWORK_SUGGESTION_POST_CONNECTION` to the app) |
+| 12:57:30.618 | Validated internet (`NetworkCallback`) |
+| Reboot | Connected again at about 67 s uptime, without the app running: approved suggestions are kept |
+
+Compared with WiFi auto:
+
+| | WiFi auto (USDK) | Network suggestions |
+|---|---|---|
+| User action | none | **Allow** in a silent notification |
+| Reboot | needed | not needed |
+| Signing key | Ingenico-approved | any |
+| Network | ordinary saved network, stays without the app | belongs to the app (`ephemeral`, `fromWifiNetworkSuggestion`), removed with the app |
+| Apps of the configuration | installed by the startup update at the reboot | the launcher has already given up: a sync request loads the configuration, the apps wait for the next boot |
+
+So suggestions are a possible **fallback** when the USDK is not available (another device, or an app not signed with the Ingenico-approved key): the app must tell the user where to find the notification (on a kiosk terminal the notification shade may be locked), wait for the connection (`NetworkCallback`), then request a configuration sync and suggest a reboot to install the apps. Android 11 and later also offer `Settings.ACTION_WIFI_ADD_NETWORKS`, a system dialog which saves the network as an ordinary user network; not available on Android 10.
+
+The sample app doesn't use suggestions.
 
 ## Sample app
 
