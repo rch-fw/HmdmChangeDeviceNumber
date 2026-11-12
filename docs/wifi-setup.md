@@ -163,6 +163,8 @@ What decides the steps:
 - The launcher knows which apps to start (*Run at boot*) and install only from its **configuration**, loaded from the server: without a network it has none.
 - Apps are installed only by the **startup update**, the first configuration update of a boot. It ends when the configuration is loaded and the apps installed, or when the configuration can't be loaded (6 retries every 10 s, about 60 s), or 3 minutes after it started; after that, apps wait for the next boot.
 
+> 🟦 **Blue blocks, marked 👆: user interaction** (tap an icon or a button, type, confirm). Starting the launcher's main screen is a button in the sample app; another kiosk app may do it by itself, without the user.
+>
 > 🟥 **Red blocks: about 60 s of delay.** Each is marked ① in the chart and explained by the ① note right below it.
 
 In the charts, the blocks in **red** are where the launcher's configuration retries add about **60 s** (6 retries every 10 s with no network). During them the user can go on (the WiFi configuration doesn't wait), but the startup gate stays closed until they end.
@@ -181,16 +183,18 @@ The enrollment the launcher needs can be started from the kiosk app, without lea
 
 ```mermaid
 flowchart TD
-    A[Open the kiosk app] --> B[Kiosk app connects to the launcher<br/>launcher not enrolled<br/>startup gate waiting]
-    B --> C[Configure WiFi through the USDK<br/>network name, password]
-    C --> D[Save WiFi auto, reboot through the USDK]
+    A[👆 Open the kiosk app<br/>tap its icon] --> B[Kiosk app connects to the launcher<br/>launcher not enrolled<br/>startup gate waiting]
+    B --> C[👆 Configure WiFi through the USDK<br/>choose the network, type the password]
+    C --> D[👆 Save WiFi auto, reboot through the USDK<br/>confirm]
     D --> E[Boot: system creates the saved network, connects]
-    E --> F[Open the kiosk app<br/>launcher not enrolled:<br/>nothing starts the app at boot]
-    F --> G[Kiosk app starts the launcher's main screen<br/>and comes back to the front]
+    E --> F[👆 Open the kiosk app, tap its icon<br/>launcher not enrolled:<br/>nothing starts the app at boot]
+    F --> G[👆 Kiosk app starts the launcher's main screen<br/>and comes back to the front]
     G --> H[Launcher enrolls, loads the configuration]
     H --> I[Startup update of this boot:<br/>apps installed]
     I --> J[Startup gate open<br/>Run at boot starts the kiosk app]
     J --> K([Operative])
+    classDef user fill:#d6eaf8,stroke:#2471a3,stroke-width:2px,color:#000
+    class A,C,D,F,G user
 ```
 
 Tested on the EX6000 with the sample app (see the log in [After the reboot no sync request is needed](#after-the-reboot-no-sync-request-is-needed)), with the launcher started 12 s after opening the app. Started after more than 3 min, the apps would wait for one more reboot: see [Timeouts](#timeouts-what-is-practicable) and the optimized chart.
@@ -199,13 +203,13 @@ Tested on the EX6000 with the sample app (see the log in [After the reboot no sy
 
 ```mermaid
 flowchart TD
-    A[Open the kiosk app] --> B[Kiosk app starts the launcher's main screen<br/>and comes back to the front<br/>launcher enrolls]
+    A[👆 Open the kiosk app<br/>tap its icon] --> B[👆 Kiosk app starts the launcher's main screen<br/>and comes back to the front<br/>launcher enrolls]
     B --> P1 & P2
     subgraph L1 [Launcher, in the background]
         P1[🟥 ① Configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
     end
     subgraph U1 [Kiosk app, at the same time]
-        P2[Configure WiFi through the USDK<br/>network name, password] --> D[Save WiFi auto, reboot through the USDK]
+        P2[👆 Configure WiFi through the USDK<br/>choose the network, type the password] --> D[👆 Save WiFi auto, reboot through the USDK<br/>confirm]
     end
     P1 -. interrupted by the reboot,<br/>or ended: no matter .-> E
     D --> E[Boot: system creates the saved network, connects]
@@ -218,6 +222,8 @@ flowchart TD
     P1 -.- N1>"① see the note below the chart"]
     class N1 note60
     classDef note60 fill:#fff,stroke:#c0392b,stroke-dasharray:4 3,color:#c0392b
+    classDef user fill:#d6eaf8,stroke:#2471a3,stroke-width:2px,color:#000
+    class A,B,P2,D user
 ```
 
 > 🟥 **① About 60 s of delay** (red block ① in the chart), but harmless: the launcher's failed configuration requests run **in the background, in parallel** with the WiFi configuration. The user doesn't wait for them: the network can be saved and the device rebooted right away, and the reboot simply interrupts them. They only keep the startup gate closed meanwhile. After the reboot nothing waits.
@@ -228,22 +234,24 @@ After the reboot no step depends on the user, so no timeout can be missed. With 
 
 ```mermaid
 flowchart TD
-    A[Open the kiosk app] --> B[Kiosk app connects to the launcher<br/>launcher not enrolled<br/>startup gate waiting]
-    B --> C[Suggest the network<br/>addNetworkSuggestions]
+    A[👆 Open the kiosk app<br/>tap its icon] --> B[Kiosk app connects to the launcher<br/>launcher not enrolled<br/>startup gate waiting]
+    B --> C[👆 Suggest the network<br/>choose the network, type the password<br/>addNetworkSuggestions]
     C --> D{First suggestion<br/>of the app?}
-    D -- yes --> E[User allows it: notification shade,<br/>Silent notifications,<br/>Allow suggested Wi-Fi networks?, ALLOW]
+    D -- yes --> E[👆 User allows it: notification shade,<br/>Silent notifications,<br/>Allow suggested Wi-Fi networks?, ALLOW]
     D -- no --> F
     E --> F[Connected with internet<br/>no reboot]
-    F --> G[Kiosk app starts the launcher's main screen<br/>and comes back to the front]
+    F --> G[👆 Kiosk app starts the launcher's main screen<br/>and comes back to the front]
     G --> H[Launcher enrolls, loads the configuration]
     H --> I{Startup update of this boot<br/>still open? within 3 min}
     I -- yes --> J[Apps installed<br/>startup gate open]
     J --> P([Operative])
     I -- no --> L[Configuration applied, apps wait<br/>startup gate already open]
-    L --> M[Reboot<br/>through the USDK, or by hand]
+    L --> M[👆 Reboot<br/>through the USDK, or by hand]
     M --> N[Boot: suggested network reconnects<br/>startup update installs the apps]
     N --> O[Run at boot starts the kiosk app]
     O --> P
+    classDef user fill:#d6eaf8,stroke:#2471a3,stroke-width:2px,color:#000
+    class A,C,E,G,M user
 ```
 
 In this procedure no sync request is needed: starting the launcher loads the configuration. The 3 minutes run from the first request of the boot, here the kiosk app's startup gate.
