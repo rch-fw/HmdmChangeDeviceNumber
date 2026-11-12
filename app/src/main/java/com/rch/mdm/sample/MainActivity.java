@@ -8,6 +8,8 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.text.format.DateFormat;
 import android.util.Log;
@@ -85,6 +87,7 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     boolean startupReady = false;
 
     private View startupPanel;
+    private TextView startupTitle;
     private TextView startupStatus;
     private ProgressBar startupProgress;
 
@@ -112,6 +115,7 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         }
 
         startupPanel = findViewById(R.id.startupPanel);
+        startupTitle = findViewById(R.id.startupTitle);
         startupStatus = findViewById(R.id.startupStatus);
         startupProgress = findViewById(R.id.startupProgress);
 
@@ -202,6 +206,7 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
     @Override
     protected void onDestroy() {
+        syncHandler.removeCallbacks(syncTimeout);
         if (mdmService != null) {
             mdmService.shutdown();
         }
@@ -262,8 +267,8 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     }
 
     private void updateButtons() {
-        // These buttons also need the MDM agent
-        int visibility = startupReady && hmdmConnected ? VISIBLE : View.GONE;
+        // These buttons also need the MDM agent; hidden while a configuration sync is running
+        int visibility = startupReady && hmdmConnected && !syncing ? VISIBLE : View.GONE;
         changeButton.setVisibility(visibility);
         getButton.setVisibility(visibility);
         syncButton.setVisibility(visibility);
@@ -347,11 +352,49 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         log("Requesting configuration sync...");
         headwindMDM.forceConfigUpdate();
         int error = headwindMDM.getMdmAgentError();
-        if (error == 0) {
-            log("Configuration sync requested");
-        } else {
+        if (error != 0) {
             log("FAILED to request configuration sync: MDM agent error " + error);
+            return;
         }
+        log("Configuration sync requested, waiting for the launcher");
+        setSyncing(true);
+        syncHandler.postDelayed(syncTimeout, SYNC_TIMEOUT_MS);
+    }
+
+    /**
+     * True from the sync request until the launcher reports the end of the configuration update
+     * (onHeadwindMDMConfigChanged()) or the timeout: the status panel is shown and the buttons
+     * which need the MDM agent are hidden.
+     */
+    private boolean syncing = false;
+
+    // The launcher sends "configUpdated" only when the update succeeds; on a network error it
+    // retries 6 times every 10 s, then gives up silently, so stop waiting after this time
+    private static final long SYNC_TIMEOUT_MS = 90 * 1000;
+
+    private final Handler syncHandler = new Handler(Looper.getMainLooper());
+
+    private final Runnable syncTimeout = new Runnable() {
+        @Override public void run() {
+            if (syncing) {
+                log("Configuration sync: no answer from the launcher within "
+                        + SYNC_TIMEOUT_MS / 1000 + " s (network or server error?)");
+                setSyncing(false);
+            }
+        }
+    };
+
+    private void setSyncing(boolean on) {
+        syncing = on;
+        if (on) {
+            startupTitle.setText("Syncing configuration, please wait");
+            startupStatus.setText("Loading the configuration from the server...");
+            startupPanel.setVisibility(VISIBLE);
+        } else {
+            syncHandler.removeCallbacks(syncTimeout);
+            startupPanel.setVisibility(View.GONE);
+        }
+        updateButtons();
     }
 
     private void confirmReboot() {
@@ -505,6 +548,11 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
     @Override
     public void onHeadwindMDMConfigChanged() {
-
+        // On the main thread (broadcast "com.hmdm.push.configUpdated", sent by the launcher at the
+        // end of each successful configuration update)
+        if (syncing) {
+            log("Configuration sync completed");
+            setSyncing(false);
+        }
     }
 }

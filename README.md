@@ -143,8 +143,12 @@ now (`HeadwindMDM.forceConfigUpdate()`), for example after the network has been 
 - During the day, with **Install app updates only at device startup** checked (the default), the
   update applies settings, policies, files and remote commands, and leaves app installs and removals
   for the next boot: use **Reboot device** to install them.
-- The log shows "Configuration sync requested" when the launcher accepted the request; the update
-  itself runs in the launcher (`adb logcat -s HeadwindMDM`).
+- While the launcher updates the configuration, the app shows "Syncing configuration, please wait"
+  and hides the buttons which need the MDM agent. It goes back to normal when the launcher reports
+  the end of the update (the `com.hmdm.push.configUpdated` broadcast, `onHeadwindMDMConfigChanged()`):
+  the log shows "Configuration sync completed".
+- The launcher reports only successful updates: on a network error it retries 6 times every 10 s
+  and gives up silently. So the app stops waiting after 90 s and logs "no answer from the launcher".
 
 ### Reboot button
 

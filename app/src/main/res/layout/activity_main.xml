@@ -12,7 +12,8 @@
         android:textIsSelectable="true"
         android:paddingBottom="12dp" />
 
-    <!-- Shown until the launcher startup update is over (startup gate) -->
+    <!-- Shown until the launcher startup update is over (startup gate),
+         and while a configuration sync requested by the app is running -->
     <LinearLayout
         android:id="@+id/startupPanel"
         android:layout_width="match_parent"
@@ -21,6 +22,7 @@
         android:paddingBottom="12dp">
 
         <TextView
+            android:id="@+id/startupTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Device updating, please wait"
