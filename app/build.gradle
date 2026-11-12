@@ -20,8 +20,8 @@ android {
         applicationId 'com.mooney.mdm.sample'
         minSdk 21
         targetSdk 34
-        versionCode 13
-        versionName '1.12'
+        versionCode 14
+        versionName '1.13'
 
         // MDM launcher library API key (LIBRARY_API_KEY of the launcher build), needed by
         // HeadwindMDM.sendPush(). Kept out of the repository: set hmdm.apiKey in local.properties.
@@ -37,9 +37,28 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 
+    // The Ingenico USDK (WiFi configuration) accepts only apps signed with an Ingenico-approved
+    // key: sign with the launcher's key when its properties are set in ~/.gradle/gradle.properties
+    // (RELEASE_M10_*), otherwise with the debug key (then the WiFi configuration fails)
+    def ingenicoKey = project.hasProperty('RELEASE_M10_STORE_FILE')
+    signingConfigs {
+        if (ingenicoKey) {
+            ingenico {
+                storeFile file(RELEASE_M10_STORE_FILE)
+                keyAlias RELEASE_M10_KEY_ALIAS
+                storePassword RELEASE_M10_STORE_PASSWORD
+                keyPassword RELEASE_M10_KEY_PASSWORD
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (ingenicoKey) signingConfig signingConfigs.ingenico
+        }
         release {
             minifyEnabled false
+            if (ingenicoKey) signingConfig signingConfigs.ingenico
         }
     }
 
@@ -51,8 +70,23 @@ android {
     }
 }
 
+def usdkJar = file('libs/usdk_api_aidl_v13.12.0.20240202.jar')
+
 dependencies {
     implementation project(':mdmlib')
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation files('libs/hmdm-1.2.2.aar')
+    // Ingenico USDK (WiFi configuration): proprietary, not in the repository, see the README
+    implementation files(usdkJar)
+}
+
+// Clear message instead of compile errors when the USDK jar is missing (checked only when the app
+// is built, so the mdmlib build doesn't need it)
+tasks.named('preBuild') {
+    doFirst {
+        if (!usdkJar.exists()) {
+            throw new GradleException("Missing ${usdkJar}: copy usdk_api_aidl_v13.12.0.20240202.jar " +
+                    "from app/libs/ of the launcher repo (or the Ingenico USDK) to app/libs/, see the README")
+        }
+    }
 }

@@ -3,3 +3,5 @@ build/
 local.properties
 *.iml
 .idea/
+# Ingenico USDK (proprietary, not in the repository): copy it from the launcher repo, see README
+app/libs/usdk_api_aidl_*.jar

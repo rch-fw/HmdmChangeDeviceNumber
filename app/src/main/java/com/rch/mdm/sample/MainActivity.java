@@ -149,6 +149,12 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         });
         updateStartLauncherButton();
 
+        findViewById(R.id.wifiButton).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, WifiActivity.class));
+            }
+        });
+
         rebootButton = findViewById(R.id.rebootButton);
         rebootButton.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {

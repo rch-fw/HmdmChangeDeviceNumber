@@ -59,6 +59,14 @@
         android:checked="true"
         android:visibility="gone" />
 
+    <!-- Not tied to the startup gate: without a network the gate stays closed
+         until the launcher gives up -->
+    <Button
+        android:id="@+id/wifiButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Configure WiFi" />
+
     <Button
         android:id="@+id/getButton"
         android:layout_width="match_parent"

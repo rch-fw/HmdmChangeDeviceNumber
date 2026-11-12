@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- WiFi network list: scan results need the location permission -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Ingenico USDK: read and write the network settings (WiFi configuration).
+         Checked by the USDK, which also requires the Ingenico-approved signing key -->
+    <uses-permission android:name="titan.extperm.NET_GET" />
+    <uses-permission android:name="titan.extperm.NET_SET" />
+
     <queries>
         <package android:name="com.hmdm.launcher" />
         <package android:name="com.hmdm.launcher.ingenico" />
+        <package android:name="com.usdk.apiservice" />
     </queries>
 
     <application
@@ -13,6 +24,11 @@
         android:theme="@style/Theme.AppCompat.DayNight">
 
 
+
+        <!-- WiFi configuration through the Ingenico USDK (see the class comment) -->
+        <activity
+            android:name=".WifiActivity"
+            android:exported="false" />
 
         <!-- Invisible: starts the MDM launcher and finishes (see the class comment) -->
         <activity

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/wifiStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="8dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/wifiScanStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Available networks"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/wifiScanButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Scan" />
+    </LinearLayout>
+
+    <!-- Access points found by the scan, strongest first; tap one to choose it -->
+    <ListView
+        android:id="@+id/wifiList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:choiceMode="singleChoice" />
+
+    <EditText
+        android:id="@+id/wifiSsid"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Network name (SSID)"
+        android:inputType="text|textNoSuggestions"
+        android:importantForAutofill="no" />
+
+    <EditText
+        android:id="@+id/wifiPassword"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Password"
+        android:inputType="textPassword"
+        android:importantForAutofill="no" />
+
+    <CheckBox
+        android:id="@+id/wifiShowPassword"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Show password" />
+
+    <Button
+        android:id="@+id/wifiSaveButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Save and reboot" />
+
+    <ProgressBar
+        android:id="@+id/wifiProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:indeterminate="true"
+        android:visibility="gone" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="8dp"
+        android:textSize="12sp"
+        android:text="WPA/WPA2 personal networks. The device connects at the next boot, then the MDM launcher loads its configuration and installs the apps." />
+
+</LinearLayout>
