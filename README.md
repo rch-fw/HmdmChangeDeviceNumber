@@ -235,7 +235,8 @@ See [WiFi setup on Ingenico terminals](docs/wifi-setup.md) for a comparison of t
 
 A network saved through WiFi auto stays even if the app is uninstalled, and "WiFi auto" stays on:
 Ingenico's system service applies it again at every boot, recreating the network even after it is
-forgotten in the settings. A suggested network belongs to the app. **Reset WiFi setup** turns WiFi
+forgotten in the settings. A suggested network is used by all apps like any WiFi connection, but the
+suggestion belongs to the app: it is removed with the app. **Reset WiFi setup** turns WiFi
 auto off, clears its network and password (`UsdkWifi.reset()`), and removes the app's suggestions. To
 reproduce a device fresh from the factory: press **Reset WiFi setup**, then forget the network in the
 settings.

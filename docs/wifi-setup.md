@@ -27,7 +27,7 @@ On Android 10 (Ingenico EX6000) an ordinary app can no longer add a WiFi network
 | Signing key | Ingenico-approved | any |
 | User action | none | **Allow** in a silent notification, once per app |
 | Connection | at the next boot: the app reboots the device | right away, a few seconds after the approval |
-| Network | ordinary saved network, stays without the app; recreated at every boot while WiFi auto is on | belongs to the app (`ephemeral`, `fromWifiNetworkSuggestion`), removed with the app; kept across reboots |
+| Network | ordinary saved network, stays without the app; recreated at every boot while WiFi auto is on | the **connection is system-wide**: the device's default network, used by all apps, the launcher included. Only the **suggestion** (the network's settings) belongs to the app (`ephemeral`, `fromWifiNetworkSuggestion`): removed with the app or when the app withdraws it; kept across reboots |
 | Launcher configuration | loaded by the startup update at the reboot: no sync request | the launcher has usually given up its startup update: a sync request loads it |
 | Apps of the configuration | installed by the startup update at the reboot | installed at the next boot (a reboot right away installs them) |
 
@@ -135,6 +135,12 @@ Tested on the EX6000 with a test app, WiFi auto off, no saved network:
 | Reboot | Connected again at about 67 s uptime, without the app running: approved suggestions are kept |
 
 The approval is asked once per app; later suggestions of the same app connect without it.
+
+**Who can use the connection.** Unlike `WifiNetworkSpecifier`, whose connection is private to the app, a suggestion only allows Android to join the network: the connection is an ordinary system WiFi connection, the device's default network, used by **all apps**, the MDM launcher included (`dumpsys wifi`: `validatedInternetAccess`). After the reboot it reconnected with the suggesting app not running. What belongs to the app is the suggestion itself:
+
+- it is removed when the app is uninstalled or withdraws its suggestions (`removeNetworkSuggestions()`);
+- it doesn't appear among the saved networks in the settings (`ephemeral`); if the user disconnects from it or forgets it there, Android stops joining it automatically;
+- a network saved by the user, in range at the same time, may be preferred.
 
 ### After the connection
 
