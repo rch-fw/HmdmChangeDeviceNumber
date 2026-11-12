@@ -52,6 +52,7 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     private Button changeButton;
 
     private Button getButton;
+    private Button syncButton;
 
     private Button rebootButton;
 
@@ -152,6 +153,13 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         findViewById(R.id.wifiButton).setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 startActivity(new Intent(MainActivity.this, WifiActivity.class));
+            }
+        });
+
+        syncButton = findViewById(R.id.syncButton);
+        syncButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                syncConfig();
             }
         });
 
@@ -258,6 +266,7 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         int visibility = startupReady && hmdmConnected ? VISIBLE : View.GONE;
         changeButton.setVisibility(visibility);
         getButton.setVisibility(visibility);
+        syncButton.setVisibility(visibility);
         rebootButton.setVisibility(visibility);
     }
 
@@ -326,6 +335,23 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         }
         ResolveInfo info = activities.get(0);
         return home.setClassName(info.activityInfo.packageName, info.activityInfo.name);
+    }
+
+    /**
+     * Asks the launcher to load the configuration from the server now.
+     * Shown only once the startup gate is open: during the startup update it would start a second
+     * configuration update in parallel. During the day (default configuration option) the update
+     * applies settings and policies, and leaves app installs and removals for the next boot.
+     */
+    private void syncConfig() {
+        log("Requesting configuration sync...");
+        headwindMDM.forceConfigUpdate();
+        int error = headwindMDM.getMdmAgentError();
+        if (error == 0) {
+            log("Configuration sync requested");
+        } else {
+            log("FAILED to request configuration sync: MDM agent error " + error);
+        }
     }
 
     private void confirmReboot() {

@@ -82,6 +82,14 @@
         android:text="Change device number"
         android:visibility="gone"/>
 
+    <!-- Shown once the startup gate is open, see syncConfig() -->
+    <Button
+        android:id="@+id/syncButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Sync configuration"
+        android:visibility="gone" />
+
     <Button
         android:id="@+id/rebootButton"
         android:layout_width="match_parent"

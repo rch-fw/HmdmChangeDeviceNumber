@@ -133,6 +133,19 @@ Ingenico launcher package `com.hmdm.launcher.ingenico`): after boot it waits
 until the MDM launcher has installed the app updates before enabling its buttons, because
 installing an app kills it. See [Startup sync with the MDM launcher](docs/startup-sync.md).
 
+### Sync configuration button
+
+The **Sync configuration** button asks the MDM launcher to load the configuration from the server
+now (`HeadwindMDM.forceConfigUpdate()`), for example after the network has been configured.
+
+- It is shown only once the startup gate is open: during the startup update it would start a second
+  configuration update in parallel (see [Startup sync](docs/startup-sync.md), rule 5).
+- During the day, with **Install app updates only at device startup** checked (the default), the
+  update applies settings, policies, files and remote commands, and leaves app installs and removals
+  for the next boot: use **Reboot device** to install them.
+- The log shows "Configuration sync requested" when the launcher accepted the request; the update
+  itself runs in the launcher (`adb logcat -s HeadwindMDM`).
+
 ### Reboot button
 
 The **Reboot device** button asks the MDM launcher to reboot the device, so the app updates
