@@ -157,6 +157,8 @@ Four procedures: the MDM launcher or the kiosk app (sample app) started first, e
 
 **Operative** means: WiFi connected, the launcher enrolled with its configuration loaded, the apps of the configuration installed, the sample app's startup gate open.
 
+In the charts, the blocks in **red** are where the launcher's configuration retries add about **60 s** (6 retries every 10 s with no network). During them the user can go on (the WiFi screen doesn't wait), but the startup gate stays closed until they end. Procedures 3 and 4, as charted, have no such block: the launcher is enrolled only when the network is already there (or, in 3, after the reboot).
+
 What decides the steps:
 
 - The launcher **enrolls** (reads its enrollment settings, chooses the device ID) only in its main screen: when it is started by hand or with **Start MDM launcher**. Binding to its plugin service (the sample app's `connect()`) starts its process but doesn't enroll it: the sample app shows "MDM launcher not configured yet".
@@ -167,7 +169,7 @@ What decides the steps:
 ```mermaid
 flowchart TD
     A[Start the MDM launcher<br/>from the app list] --> B[Launcher enrolls<br/>device ID from the USDK serial]
-    B --> C[Configuration request fails: no network<br/>6 retries every 10 s]
+    B --> C[Configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
     C --> D[Startup update ends without configuration]
     D --> E[Go to the home screen, open the sample app]
     E --> F[Startup gate open<br/>'MDM launcher not configured yet']
@@ -178,6 +180,8 @@ flowchart TD
     J --> K[Startup update: configuration loaded,<br/>apps installed]
     K --> L[Run at boot starts the sample app<br/>startup gate open]
     L --> M([Operative])
+    classDef delay60 fill:#f8d7da,stroke:#c0392b,stroke-width:2px,color:#000
+    class C delay60
 ```
 
 ### 2. Launcher first, WiFi through a network suggestion
@@ -185,7 +189,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     A[Start the MDM launcher<br/>from the app list] --> B[Launcher enrolls<br/>device ID from the USDK serial]
-    B --> C[Configuration request fails: no network<br/>6 retries every 10 s]
+    B --> C[Configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
     C --> D[Startup update ends without configuration]
     D --> E[Go to the home screen, open the sample app]
     E --> F[Startup gate open<br/>'MDM launcher not configured yet']
@@ -201,6 +205,8 @@ flowchart TD
     M --> N[Boot: suggested network reconnects<br/>startup update installs the apps]
     N --> O[Run at boot starts the sample app<br/>startup gate open]
     O --> P
+    classDef delay60 fill:#f8d7da,stroke:#c0392b,stroke-width:2px,color:#000
+    class C delay60
 ```
 
 ### 3. Sample app first, WiFi through the Ingenico USDK
@@ -273,7 +279,7 @@ Both are counted once per boot, and the WiFi screen doesn't wait for either: it 
 flowchart TD
     A[Open the sample app] --> B['MDM launcher not configured yet'<br/>Start MDM launcher shown]
     B --> C[Start MDM launcher<br/>sample app comes back to the front]
-    C --> D[Launcher enrolls<br/>configuration request fails: no network]
+    C --> D[Launcher enrolls<br/>configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
     D --> E[Configure WiFi, Ingenico USDK<br/>choose the network, password]
     E --> F[Save and reboot<br/>WiFi auto saved, USDK reboot]
     F --> G[Boot: system creates the saved network, connects]
@@ -281,6 +287,8 @@ flowchart TD
     H --> I[Startup update: configuration loaded,<br/>apps installed]
     I --> J[Run at boot starts the sample app<br/>startup gate open]
     J --> K([Operative])
+    classDef delay60 fill:#f8d7da,stroke:#c0392b,stroke-width:2px,color:#000
+    class D delay60
 ```
 
 After the reboot no step depends on the user, so no timeout can be missed: this is procedure 1 started from the sample app. With WiFi through the Ingenico USDK, the best procedure is therefore always: **enroll the launcher first** (start it, or **Start MDM launcher**), then **Save and reboot**.
