@@ -157,6 +157,8 @@ Four procedures: the MDM launcher or the kiosk app (sample app) started first, e
 
 **Operative** means: WiFi connected, the launcher enrolled with its configuration loaded, the apps of the configuration installed, the sample app's startup gate open.
 
+> 🟥 **Red blocks: about 60 s of delay.**
+
 In the charts, the blocks in **red** are where the launcher's configuration retries add about **60 s** (6 retries every 10 s with no network). During them the user can go on (the WiFi screen doesn't wait), but the startup gate stays closed until they end. Procedures 3 and 4, as charted, have no such block: the launcher is enrolled only when the network is already there (or, in 3, after the reboot).
 
 What decides the steps:
@@ -184,6 +186,8 @@ flowchart TD
     class C delay60
 ```
 
+> 🟥 **About 60 s of delay** (red block): the launcher was started without a network, so its configuration request is retried 6 times every 10 s before the startup update ends. The startup gate stays closed meanwhile; **Configure WiFi** doesn't need to wait.
+
 ### 2. Launcher first, WiFi through a network suggestion
 
 ```mermaid
@@ -208,6 +212,8 @@ flowchart TD
     classDef delay60 fill:#f8d7da,stroke:#c0392b,stroke-width:2px,color:#000
     class C delay60
 ```
+
+> 🟥 **About 60 s of delay** (red block): the launcher was started without a network, so its configuration request is retried 6 times every 10 s before the startup update ends. **Sync configuration** appears only after it, when the startup gate opens; **Configure WiFi** and **Connect** don't need to wait.
 
 ### 3. Sample app first, WiFi through the Ingenico USDK
 
@@ -290,6 +296,8 @@ flowchart TD
     classDef delay60 fill:#f8d7da,stroke:#c0392b,stroke-width:2px,color:#000
     class D delay60
 ```
+
+> 🟥 **About 60 s of delay** (red block), but harmless: it happens in the first boot, before **Save and reboot**, and only keeps the startup gate closed. After the reboot nothing waits.
 
 After the reboot no step depends on the user, so no timeout can be missed: this is procedure 1 started from the sample app. With WiFi through the Ingenico USDK, the best procedure is therefore always: **enroll the launcher first** (start it, or **Start MDM launcher**), then **Save and reboot**.
 
