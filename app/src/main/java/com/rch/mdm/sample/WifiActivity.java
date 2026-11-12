@@ -90,6 +90,7 @@ public class WifiActivity extends AppCompatActivity {
     private EditText ssidField;
     private EditText passwordField;
     private Button saveButton;
+    private Button resetButton;
     private ProgressBar progress;
 
     @Override
@@ -113,6 +114,8 @@ public class WifiActivity extends AppCompatActivity {
         });
 
         saveButton.setOnClickListener(v -> confirmSave());
+        resetButton = findViewById(R.id.wifiResetButton);
+        resetButton.setOnClickListener(v -> confirmReset());
 
         wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         scanStatus = findViewById(R.id.wifiScanStatus);
@@ -133,6 +136,7 @@ public class WifiActivity extends AppCompatActivity {
         if (!UsdkWifi.isAvailable(this)) {
             status.setText("Ingenico USDK not available on this device: WiFi can't be configured here.");
             saveButton.setEnabled(false);
+            resetButton.setEnabled(false);
             return;
         }
         refreshStatus();
@@ -278,8 +282,38 @@ public class WifiActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Resets "WiFi auto" to the factory state (off, no SSID, no password): otherwise the network saved
+     * here comes back at every boot, even after forgetting it in the settings. To reproduce a device
+     * fresh from the factory: reset here, then forget the network in the settings.
+     */
+    private void confirmReset() {
+        new AlertDialog.Builder(this)
+                .setTitle("Reset WiFi auto")
+                .setMessage("Turn off WiFi auto and clear its network and password? The network already "
+                        + "saved by Android stays: forget it in the settings to start from scratch.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Reset", (dialog, which) -> {
+                    setBusy(true);
+                    UsdkWifi.reset(this, error -> {
+                        setBusy(false);
+                        if (error != null) {
+                            status.setText("FAILED to reset WiFi auto: " + error);
+                            Log.w(TAG, "WiFi: FAILED to reset WiFi auto: " + error);
+                            return;
+                        }
+                        Log.i(TAG, "WiFi: WiFi auto reset");
+                        ssidField.setText("");
+                        passwordField.setText("");
+                        refreshStatus();
+                    });
+                })
+                .show();
+    }
+
     private void setBusy(boolean busy) {
         progress.setVisibility(busy ? View.VISIBLE : View.GONE);
         saveButton.setEnabled(!busy);
+        resetButton.setEnabled(!busy);
     }
 }

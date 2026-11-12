@@ -219,8 +219,12 @@ WPA/WPA2 password, then press **Save and reboot**:
 4. the MDM launcher's startup update then loads the configuration and installs the apps as usual.
 
 The settings are applied only at boot: without the reboot the device doesn't connect. Once
-created, the saved network stays even if the app is uninstalled. "WiFi auto" stays on and is
-applied again at every boot.
+created, the saved network stays even if the app is uninstalled.
+
+"WiFi auto" stays on: Ingenico's system service applies it again at every boot, and recreates the
+network even after it is forgotten in the settings. **Reset WiFi auto** turns it off and clears its
+network and password (`UsdkWifi.reset()`). To reproduce a device fresh from the factory: press
+**Reset WiFi auto**, then forget the network in the settings.
 
 - The network list needs the location permission and the location turned on (Android 10 scan
   results). The Ingenico firmware grants the permission at install, so no dialog is shown. Android

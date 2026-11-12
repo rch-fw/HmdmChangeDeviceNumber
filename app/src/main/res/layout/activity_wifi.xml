@@ -68,6 +68,13 @@
         android:layout_height="wrap_content"
         android:text="Save and reboot" />
 
+    <!-- Back to the factory state of "WiFi auto", to test the setup of a new device -->
+    <Button
+        android:id="@+id/wifiResetButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Reset WiFi auto" />
+
     <ProgressBar
         android:id="@+id/wifiProgress"
         style="?android:attr/progressBarStyleHorizontal"

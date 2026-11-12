@@ -23,6 +23,9 @@ import com.usdk.apiservice.aidl.networkmanager.UNetWorkManager;
  * that SSID and password and connects to it. So the network is saved with {@link #save} and
  * the device is rebooted with {@link #reboot}.
  *
+ * "WiFi auto" stays on and is applied again at every boot, recreating the network even after the
+ * user forgets it in the settings; {@link #reset} turns it off.
+ *
  * The USDK accepts the calls only from apps signed with an Ingenico-approved key
  * (the launcher's key): with the debug key they fail.
  */
@@ -79,6 +82,23 @@ public class UsdkWifi {
             if (ret != 0) return "setWifiAutoPasswd error " + ret;
             ret = nm.setWifiAutoEnabled(true);
             if (ret != 0) return "setWifiAutoEnabled error " + ret;
+            return null;
+        }, callback);
+    }
+
+    /**
+     * Turns WiFi auto off and blanks the stored SSID and password, as on a device fresh from the
+     * factory. The network Android already saved is not removed (forget it in the settings).
+     */
+    public static void reset(Context context, Callback callback) {
+        run(context, service -> {
+            UNetWorkManager nm = networkManager(service);
+            int ret = nm.setWifiAutoEnabled(false);
+            if (ret != 0) return "setWifiAutoEnabled error " + ret;
+            ret = nm.setWifiAutoPasswd("");
+            if (ret != 0) return "setWifiAutoPasswd error " + ret;
+            ret = nm.setWifiAutoSSID("");
+            if (ret != 0) return "setWifiAutoSSID error " + ret;
             return null;
         }, callback);
     }
