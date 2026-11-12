@@ -220,7 +220,7 @@ flowchart TD
     K --> L([Operative])
 ```
 
-Tested on the EX6000 (see the log in [After the reboot no sync request is needed](#after-the-reboot-no-sync-request-is-needed)).
+Tested on the EX6000 (see the log in [After the reboot no sync request is needed](#after-the-reboot-no-sync-request-is-needed)), with **Start MDM launcher** pressed 12 s after opening the sample app. Pressed after more than 3 min, the apps would wait for one more reboot: see [Timeouts](#timeouts-what-is-practicable) and the optimized chart.
 
 ### 4. Sample app first, WiFi through a network suggestion
 
@@ -248,6 +248,42 @@ flowchart TD
 In this procedure **Sync configuration** is not needed: starting the launcher loads the configuration. The 3 minutes run from the first request of the boot, here the sample app's startup gate.
 
 Procedures 1, 2 and 4 combine steps tested on the EX6000 one by one (launcher start without network, the USDK reboot, the suggestion approval and connection, the sync request); they haven't been run end to end.
+
+### Timeouts: what is practicable
+
+Two launcher timeouts decide whether a procedure installs the apps in the current boot or needs one more reboot (the launcher is left as it is):
+
+| Timeout | Starts | When it expires |
+|---|---|---|
+| **Configuration retries**: 6 × 10 s, about 60 s | when the enrolled launcher first asks for the configuration in a boot (at boot, or when its main screen enrolls it) | the startup update ends without configuration; the startup gate opens; apps wait for the next boot |
+| **Startup update**: 3 min | at the first request of the boot to the startup update: the kiosk app's startup gate (`awaitStartupUpdate`), or the launcher's own update | the startup update ends; apps wait for the next boot |
+
+Both are counted once per boot, and the WiFi screen doesn't wait for either: it can be used while the startup gate is still closed.
+
+| Procedure | As charted | Timeout | Optimized |
+|---|---|---|---|
+| 1. Launcher first, USDK | **Practicable** | The first boot's 60 s retries fail, but the reboot starts a new startup update. | Don't wait for the startup gate (about 60 s): open the sample app and configure WiFi right away. |
+| 2. Launcher first, suggestion | **Practicable** with **Sync configuration** and a reboot | The apps would be installed without a reboot only if WiFi connected within the launcher's 60 s retries: start the launcher, go to the home screen, open the sample app, choose the network, **Connect**, find the notification, **Allow**. Not practicable by hand. | No way to avoid the reboot. Starting the sample app first and the launcher after the WiFi connected is procedure 4, optimized. |
+| 3. Sample app first, USDK | **At risk** | After the reboot the sample app's startup gate starts the 3 min (the launcher, not enrolled, does nothing at boot). If **Start MDM launcher** is pressed later than 3 min after opening the sample app, the startup update has expired: configuration loaded, apps wait, one more reboot. | **Start MDM launcher before Save and reboot**: the launcher enrolls in the first boot (its configuration request fails, no matter). After the reboot it starts by itself, and its startup update loads the configuration and installs the apps with no user action: chart below. |
+| 4. Sample app first, suggestion | **Practicable within 3 min** of opening the sample app | The 3 min start when the sample app opens (its startup gate). WiFi, approval and **Start MDM launcher** must all fit in them. Starting the launcher **before** the WiFi connects is worse: its 60 s retries fail and end the startup update. | Order: open the sample app → **Configure WiFi** → **Connect** → **Allow** → **Start MDM launcher**, without pauses. Past 3 min: reboot, as charted. |
+
+#### 3, optimized: sample app first, WiFi through the Ingenico USDK
+
+```mermaid
+flowchart TD
+    A[Open the sample app] --> B['MDM launcher not configured yet'<br/>Start MDM launcher shown]
+    B --> C[Start MDM launcher<br/>sample app comes back to the front]
+    C --> D[Launcher enrolls<br/>configuration request fails: no network]
+    D --> E[Configure WiFi, Ingenico USDK<br/>choose the network, password]
+    E --> F[Save and reboot<br/>WiFi auto saved, USDK reboot]
+    F --> G[Boot: system creates the saved network, connects]
+    G --> H[Launcher starts at boot<br/>already enrolled]
+    H --> I[Startup update: configuration loaded,<br/>apps installed]
+    I --> J[Run at boot starts the sample app<br/>startup gate open]
+    J --> K([Operative])
+```
+
+After the reboot no step depends on the user, so no timeout can be missed: this is procedure 1 started from the sample app. With WiFi through the Ingenico USDK, the best procedure is therefore always: **enroll the launcher first** (start it, or **Start MDM launcher**), then **Save and reboot**.
 
 ## Network list
 
