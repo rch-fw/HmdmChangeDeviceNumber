@@ -201,23 +201,28 @@ Tested on the EX6000 (see the log in [After the reboot no sync request is needed
 ```mermaid
 flowchart TD
     A[Open the sample app] --> B['MDM launcher not configured yet'<br/>Start MDM launcher shown]
-    B --> C[Start MDM launcher<br/>sample app comes back to the front]
-    C --> D[🟥 ① Launcher enrolls<br/>configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
-    D --> E[Configure WiFi, Ingenico USDK<br/>choose the network, password]
-    E --> F[Save and reboot<br/>WiFi auto saved, USDK reboot]
+    B --> C[Start MDM launcher<br/>sample app comes back to the front<br/>launcher enrolls]
+    C --> P1 & P2
+    subgraph L1 [Launcher, in the background]
+        P1[🟥 ① Configuration request fails: no network<br/>6 retries every 10 s: about 60 s]
+    end
+    subgraph U1 [User, in the sample app, at the same time]
+        P2[Configure WiFi, Ingenico USDK<br/>choose the network, password] --> F[Save and reboot<br/>WiFi auto saved, USDK reboot]
+    end
+    P1 -. interrupted by the reboot,<br/>or ended: no matter .-> G
     F --> G[Boot: system creates the saved network, connects]
     G --> H[Launcher starts at boot<br/>already enrolled]
     H --> I[Startup update: configuration loaded,<br/>apps installed]
     I --> J[Run at boot starts the sample app<br/>startup gate open]
     J --> K([Operative])
     classDef delay60 fill:#f8d7da,stroke:#c0392b,stroke-width:2px,color:#000
-    class D delay60
-    D -.- N1>"① see the note below the chart"]
+    class P1 delay60
+    P1 -.- N1>"① see the note below the chart"]
     class N1 note60
     classDef note60 fill:#fff,stroke:#c0392b,stroke-dasharray:4 3,color:#c0392b
 ```
 
-> 🟥 **① About 60 s of delay** (red block ① in the chart), but harmless: it happens in the first boot, before **Save and reboot**, and only keeps the startup gate closed. After the reboot nothing waits.
+> 🟥 **① About 60 s of delay** (red block ① in the chart), but harmless: the launcher's failed configuration requests run **in the background, in parallel** with **Configure WiFi**. The user doesn't wait for them: **Save and reboot** can be pressed right away, and the reboot simply interrupts them. They only keep the startup gate closed meanwhile. After the reboot nothing waits.
 
 After the reboot no step depends on the user, so no timeout can be missed. With WiFi through the Ingenico USDK, the best procedure is therefore: **Start MDM launcher** first, then **Save and reboot**.
 
