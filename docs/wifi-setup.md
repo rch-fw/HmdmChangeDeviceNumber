@@ -145,12 +145,15 @@ Compared with WiFi auto:
 
 So suggestions are a possible **fallback** when the USDK is not available (another device, or an app not signed with the Ingenico-approved key): the app must tell the user where to find the notification (on a kiosk terminal the notification shade may be locked), wait for the connection (`NetworkCallback`), then request a configuration sync and suggest a reboot to install the apps. Android 11 and later also offer `Settings.ACTION_WIFI_ADD_NETWORKS`, a system dialog which saves the network as an ordinary user network; not available on Android 10.
 
-The sample app doesn't use suggestions.
+The sample app offers suggestions as its second mode (see [Sample app](#sample-app)).
 
 ## Sample app
 
-- **Configure WiFi** (main screen, always shown, not tied to the startup gate): list of access points, network name, password, **Save and reboot**.
-- **Reset WiFi auto** (same screen): turns WiFi auto off and clears its network and password. To reproduce a device fresh from the factory: press it, then forget the network in the settings.
+- **Configure WiFi** (main screen, always shown, not tied to the startup gate): setup mode, list of access points, network name, password. The mode is saved:
+  - **Ingenico USDK** (default): **Save and reboot** saves the network in WiFi auto and reboots through the USDK.
+  - **Android suggestion**: **Connect** suggests the network and tells the user where to allow it (notification shade, *Silent notifications*, *Allow suggested Wi‑Fi networks?*, **ALLOW**). When the device is connected with internet the screen offers **Sync configuration** (the main screen requests the sync and waits for it; skipped while the launcher's startup update is still running) and **Reboot** (through the USDK, so the startup update installs the apps). Open networks are allowed (empty password).
+  - If the USDK is not available or refuses the calls (signing key), the USDK mode is disabled and the screen uses the Android suggestion.
+- **Reset WiFi setup** (same screen): removes the app's suggestions and turns WiFi auto off, clearing its network and password. To reproduce a device fresh from the factory: press it, then forget the network in the settings.
 - **Sync configuration** (main screen, once the startup gate is open).
 
 Code: `WifiActivity`, `UsdkWifi` (`save()`, `reboot()`, `reset()`, `readStatus()`), `MainActivity.syncConfig()`.

@@ -216,7 +216,7 @@ Notes:
 The **Configure WiFi** button opens a screen to set the WiFi network without the system settings,
 for example on a device fresh from the factory with no network. Choose the network from the list of
 access points nearby (strongest first; **Scan** searches again) or type its name, enter the
-WPA/WPA2 password, then press **Save and reboot**:
+WPA/WPA2 password, then press **Save and reboot** (Ingenico USDK mode, the default):
 
 1. the app saves the network through the Ingenico USDK "WiFi auto" settings
    (`UNetWorkManager.setWifiAutoSSID` / `setWifiAutoPasswd` / `setWifiAutoEnabled`);
@@ -228,9 +228,14 @@ The settings are applied only at boot: without the reboot the device doesn't con
 created, the saved network stays even if the app is uninstalled.
 
 "WiFi auto" stays on: Ingenico's system service applies it again at every boot, and recreates the
-network even after it is forgotten in the settings. **Reset WiFi auto** turns it off and clears its
-network and password (`UsdkWifi.reset()`). To reproduce a device fresh from the factory: press
-**Reset WiFi auto**, then forget the network in the settings.
+network even after it is forgotten in the settings. **Reset WiFi setup** turns it off and clears its
+network and password (`UsdkWifi.reset()`), and removes the app's Android suggestions. To reproduce a
+device fresh from the factory: press **Reset WiFi setup**, then forget the network in the settings.
+
+The screen has a second mode, **Android suggestion** (`WifiManager.addNetworkSuggestions()`):
+**Connect** works without a reboot and without the Ingenico key, once the user allows the suggestion
+in the notification shade; then the screen offers **Sync configuration** and **Reboot**. It is used
+automatically when the USDK is not available. See [WiFi setup](docs/wifi-setup.md#network-suggestions).
 
 - The network list needs the location permission and the location turned on (Android 10 scan
   results). The Ingenico firmware grants the permission at install, so no dialog is shown. Android

@@ -9,7 +9,50 @@
         android:id="@+id/wifiStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingBottom="8dp" />
+        android:paddingBottom="4dp" />
+
+    <!-- Shown when an Android suggestion connected: next steps for the MDM launcher -->
+    <LinearLayout
+        android:id="@+id/wifiConnectedPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/wifiSyncButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Sync configuration" />
+
+        <Button
+            android:id="@+id/wifiRebootButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Reboot" />
+    </LinearLayout>
+
+    <!-- Setup mode, saved in the preferences -->
+    <RadioGroup
+        android:id="@+id/wifiMode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <RadioButton
+            android:id="@+id/wifiModeUsdk"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Ingenico USDK: saved, connects after a reboot" />
+
+        <RadioButton
+            android:id="@+id/wifiModeSuggestion"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Android suggestion: connects now, after approval in the notification" />
+    </RadioGroup>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -68,12 +111,12 @@
         android:layout_height="wrap_content"
         android:text="Save and reboot" />
 
-    <!-- Back to the factory state of "WiFi auto", to test the setup of a new device -->
+    <!-- Back to the factory state, to test the setup of a new device -->
     <Button
         android:id="@+id/wifiResetButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Reset WiFi auto" />
+        android:text="Reset WiFi setup" />
 
     <ProgressBar
         android:id="@+id/wifiProgress"
@@ -82,12 +125,5 @@
         android:layout_height="wrap_content"
         android:indeterminate="true"
         android:visibility="gone" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingTop="8dp"
-        android:textSize="12sp"
-        android:text="WPA/WPA2 personal networks. The device connects at the next boot, then the MDM launcher loads its configuration and installs the apps." />
 
 </LinearLayout>

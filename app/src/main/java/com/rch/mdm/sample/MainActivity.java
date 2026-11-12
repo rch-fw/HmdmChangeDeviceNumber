@@ -156,7 +156,7 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
         findViewById(R.id.wifiButton).setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, WifiActivity.class));
+                startActivityForResult(new Intent(MainActivity.this, WifiActivity.class), REQUEST_WIFI);
             }
         });
 
@@ -201,6 +201,23 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
             }
             launcherStarted = true;
             updateStartLauncherButton();
+        }
+    }
+
+    private static final int REQUEST_WIFI = 1;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        // "Sync configuration" on the WiFi screen, after an Android suggestion connected
+        if (requestCode == REQUEST_WIFI && resultCode == WifiActivity.RESULT_SYNC) {
+            if (startupReady && hmdmConnected) {
+                syncConfig();
+            } else {
+                // The startup update is still running: it loads the configuration itself
+                log("Configuration sync not requested: the launcher's startup update is still running "
+                        + "(or the MDM agent is not connected)");
+            }
         }
     }
 
