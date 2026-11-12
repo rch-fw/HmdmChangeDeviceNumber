@@ -1,0 +1,67 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.rch.mdm.ingenico'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.mooney.mdm.ingenico'
+        minSdk 28
+        // targetSdk 28: Android 10 lets only apps targeting SDK 28 or lower add a WiFi network
+        // (WifiManager.addNetwork(), see docs/wifi-setup.md). Not for the Play Store.
+        targetSdk 28
+        versionCode 1
+        versionName '1.0'
+    }
+
+    lint {
+        // targetSdk 28 on purpose (see defaultConfig); the app is not distributed through the Play Store
+        disable 'ExpiredTargetSdkVersion', 'OldTargetApi'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    // Same key as the MDM launcher when its properties are set in ~/.gradle/gradle.properties
+    // (RELEASE_M10_*), otherwise the debug key. addNetwork works with any key.
+    def ingenicoKey = project.hasProperty('RELEASE_M10_STORE_FILE')
+    signingConfigs {
+        if (ingenicoKey) {
+            ingenico {
+                storeFile file(RELEASE_M10_STORE_FILE)
+                keyAlias RELEASE_M10_KEY_ALIAS
+                storePassword RELEASE_M10_STORE_PASSWORD
+                keyPassword RELEASE_M10_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            if (ingenicoKey) signingConfig signingConfigs.ingenico
+        }
+        release {
+            minifyEnabled false
+            if (ingenicoKey) signingConfig signingConfigs.ingenico
+        }
+    }
+
+    // APK name: ingenico_sample_app-<versionName>-<buildType>.apk
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "ingenico_sample_app-${variant.versionName}-${variant.buildType.name}.apk"
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    // Device number and groups through the MDM server's REST API (Change device number)
+    implementation project(':mdmlib')
+    // Headwind MDM library, the same as the sample app's
+    implementation files('../app/libs/hmdm-1.2.2.aar')
+}
