@@ -149,6 +149,8 @@ now (`HeadwindMDM.forceConfigUpdate()`), for example after the network has been 
   the log shows "Configuration sync completed".
 - The launcher reports only successful updates: on a network error it retries 6 times every 10 s
   and gives up silently. So the app stops waiting after 90 s and logs "no answer from the launcher".
+- After **Configure WiFi** no sync is needed: the reboot runs the startup update, which also installs
+  the apps. See [WiFi setup](docs/wifi-setup.md#sync-request-availability) for the sync APIs.
 
 ### Reboot button
 
@@ -246,4 +248,5 @@ network and password (`UsdkWifi.reset()`). To reproduce a device fresh from the 
   building the sample app, copy `usdk_api_aidl_v13.12.0.20240202.jar` from `app/libs/` of the
   launcher repo (mooney-mdm-agent), or from the Ingenico USDK, to `app/libs/`. Without it the build
   stops with a message saying so. The `mdmlib` library doesn't need it.
-- Code: `WifiActivity`, `UsdkWifi`.
+- Code: `WifiActivity`, `UsdkWifi`. See [WiFi setup on Ingenico terminals](docs/wifi-setup.md) for
+  how "WiFi auto" works, why the reboot is needed and why no sync request is needed after it.
