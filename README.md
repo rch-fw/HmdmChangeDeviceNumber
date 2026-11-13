@@ -133,6 +133,10 @@ running it waits for the startup update only. Then it is operative, with **Get d
 up: the app only waits for the startup update, then it is operative with **Get device number**,
 **Change device number** and **Sync configuration**. See [Sunmi Sample App](docs/sunmi-sample-app.md).
 
+For a kiosk app that opens the WiFi settings in kiosk mode (which intent, what the configuration
+must allow, the launcher restarting the kiosk app at every configuration push) see
+[WiFi settings from a kiosk app on Sunmi terminals](docs/kiosk-wifi-settings.md).
+
 # Sample app
 
 Shows how to create a demo app that uses 2 libraries:
