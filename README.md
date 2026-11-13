@@ -143,6 +143,9 @@ Shows how to create a demo app that uses 2 libraries:
 - hmdm library is described here : https://h-mdm.com/headwind-mdm-api/
 - hmdm libray allow the interaction of an user defined app with mdm agent included
   retrieval of mdm related info like **device Id** and **mdm server url**.
+- Methods added to `HeadwindMDM` on top of the upstream library (`awaitStartupUpdate()`,
+  `startLauncher()`, `getLauncherPackage()`): [hmdm library](docs/hmdm-library.md), version
+  history in the [hmdm library changelog](docs/hmdm-library-changelog.md).
 
 The sample app also shows the **startup gate** (hmdm library 1.2.0 or later; the app ships 1.2.3; 1.2.1 and later also connect to the
 Ingenico launcher package `com.hmdm.launcher.ingenico`): after boot it waits
