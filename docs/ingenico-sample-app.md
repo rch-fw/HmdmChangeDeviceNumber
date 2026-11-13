@@ -48,13 +48,13 @@ From then on the launcher starts the app at every boot (*Run at boot*), and the 
 
 ```mermaid
 flowchart TD
-    A["👆 Open the app"] --> S["▶ Read the launcher's stopped state from the package manager:<br/>getPackageManager().getApplicationInfo(launcher, 0).flags<br/>#amp; ApplicationInfo.FLAG_STOPPED<br/>now, because connect() clears it"]
+    A["👆 Open the app"] --> S["▶ Read the launcher's stopped state from the package manager:<br/>getPackageManager().getApplicationInfo(launcher, 0).flags<br/>#amp; ApplicationInfo.FLAG_STOPPED<br/>now, because connect() clears it<br/>→ launcherStopped"]
     S --> B["⚙ HeadwindMDM.getInstance()<br/>.connect(context, handler)<br/>binds the launcher's plugin service:<br/>takes the launcher out of the stopped state<br/>but doesn't enroll it or run its startup update"]
     B -- "false, or no answer within 15 s" --> X(["Ready: MDM agent not available"])
     B --> CB["↩ onHeadwindMDMConnected()"]
-    CB --> C{"Agent running?<br/>⚙ getMdmAgentError() ≠ ERROR_NOT_CONFIGURED<br/>and not stopped"}
-    C -- yes --> G
-    C -- no --> D{"Network with<br/>internet?<br/>▶ ConnectivityManager:<br/>NET_CAPABILITY_VALIDATED"}
+    CB --> C{"Agent running?<br/>enrolled: ⚙ getMdmAgentError() ≠ ERROR_NOT_CONFIGURED<br/>and not launcherStopped"}
+    C -- "yes: running" --> G
+    C -- "no: not enrolled or launcherStopped<br/>agentInitialized = true" --> D{"Network with<br/>internet?<br/>▶ ConnectivityManager:<br/>NET_CAPABILITY_VALIDATED"}
     D -- no --> E["👆 Configure WiFi: choose the network,<br/>type the password, Connect<br/>▶ WifiManager.addNetwork() + enableNetwork()<br/>wait for internet"]
     E --> F1
     D -- yes --> F1
@@ -67,7 +67,7 @@ flowchart TD
     F4 --> G
     F5 --> G["⚙ awaitStartupUpdate(StartupGateListener)<br/>startup gate: waits for the app updates of this boot<br/>↩ onAppDownloading / onAppInstalling / onDownloadProgress"]
     G -- "startup update over:<br/>Run at boot brings the app back to the front" --> R["↩ onReady(reason)<br/>STARTUP_READY · STARTUP_TIMEOUT · STARTUP_NO_MDM"]
-    R --> K{"Launcher started<br/>by the app?"}
+    R --> K{"agentInitialized?<br/>launcher started by the app<br/>(not enrolled or stopped)"}
     K -- yes --> RC["⚙ disconnect() + connect()<br/>the data read at the first connection<br/>was from before the enrollment"]
     RC --> RC2["↩ onHeadwindMDMConnected()"]
     RC2 --> H
