@@ -48,20 +48,35 @@ From then on the launcher starts the app at every boot (*Run at boot*), and the 
 
 ```mermaid
 flowchart TD
-    A[👆 Open the app] --> B[Connect to the MDM agent<br/>stopped state read before connecting]
-    B --> C{Agent running?<br/>enrolled and not stopped}
+    A["👆 Open the app"] --> S["Read the launcher's stopped state<br/>ApplicationInfo.FLAG_STOPPED<br/>before connecting"]
+    S --> B["⚙ HeadwindMDM.getInstance()<br/>.connect(context, handler)<br/>binds the launcher's plugin service"]
+    B -- "false, or no answer within 15 s" --> X(["Ready: MDM agent not available"])
+    B --> CB["⚙ onHeadwindMDMConnected()"]
+    CB --> C{"Agent running?<br/>⚙ getMdmAgentError() ≠ ERROR_NOT_CONFIGURED<br/>and not stopped"}
     C -- yes --> G
-    C -- no --> D{Network with<br/>internet?}
-    D -- no --> E[👆 Configure WiFi: choose the network,<br/>type the password, Connect<br/>addNetwork, wait for internet]
+    C -- no --> D{"Network with<br/>internet?"}
+    D -- no --> E["👆 Configure WiFi: choose the network,<br/>type the password, Connect<br/>addNetwork, wait for internet"]
     E --> F
-    D -- yes --> F[Start the launcher's main screen<br/>and come back to the front<br/>the launcher enrolls]
-    F --> G[Startup gate: wait for the app updates<br/>of this boot awaitStartupUpdate]
-    G --> H([Ready: operative])
+    D -- yes --> F["Start the launcher's main screen<br/>and come back to the front<br/>the launcher enrolls"]
+    F --> G["⚙ awaitStartupUpdate(StartupGateListener)<br/>startup gate: waits for the app updates of this boot<br/>onAppDownloading / onAppInstalling / onDownloadProgress"]
+    G --> R["⚙ onReady(reason)<br/>STARTUP_READY · STARTUP_TIMEOUT · STARTUP_NO_MDM"]
+    R --> K{"Launcher started<br/>by the app?"}
+    K -- yes --> RC["⚙ disconnect() + connect()<br/>the data read at the first connection<br/>was from before the enrollment"]
+    RC --> RC2["⚙ onHeadwindMDMConnected()"]
+    RC2 --> H
+    K -- no --> H(["Ready: operative<br/>⚙ getServerHost(), getDeviceId(), getMdmAgentError()"])
+    H -.-> P1["Get device number<br/>⚙ disconnect() + connect()"]
+    H -.-> P2["Change device number<br/>⚙ getServerUrl(), getDeviceId()<br/>then the server's REST API<br/>⚙ onHeadwindMDMConfigChanged()"]
+    H -.-> P3["Sync configuration<br/>⚙ forceConfigUpdate()<br/>⚙ onHeadwindMDMConfigChanged()"]
     classDef user fill:#d6eaf8,stroke:#2471a3,stroke-width:2px,color:#000
+    classDef mdm fill:#fdebd0,stroke:#d35400,stroke-width:2px,color:#000
     class A,E user
+    class B,CB,C,G,R,RC,RC2,H,P1,P2,P3 mdm
 ```
 
 🟦 Blue blocks, marked 👆: the only steps which need the user.
+
+🟧 Orange blocks, marked ⚙: calls to the `HeadwindMDM` library (methods of `HeadwindMDM.getInstance()`) and its callbacks (`HeadwindMDM.EventHandler`, `HeadwindMDM.StartupGateListener`). Dashed arrows: the buttons of the ready screen.
 
 | Situation at start | What the app does |
 |---|---|
