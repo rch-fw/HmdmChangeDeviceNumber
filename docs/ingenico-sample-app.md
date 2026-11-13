@@ -48,13 +48,17 @@ From then on the launcher starts the app at every boot (*Run at boot*), and the 
 
 ```mermaid
 flowchart TD
-    A["👆 Open the app"] --> S["▶ Read the launcher's stopped state from the package manager:<br/>getPackageManager().getApplicationInfo(launcher, 0).flags<br/>#amp; ApplicationInfo.FLAG_STOPPED<br/>now, because connect() clears it<br/>→ launcherStopped"]
+    A["👆 Open the app"] --> S["▶ Read the launcher's stopped state from the package manager:<br/>getPackageManager().getApplicationInfo(launcher, 0).flags<br/>#amp; ApplicationInfo.FLAG_STOPPED<br/>now, because connect() clears it"]
+    S -- "✎ set" --o VS[("🔖 launcherStopped<br/>status variable")]
+    VS -- "👁 read" --o C
     S --> B["⚙ HeadwindMDM.getInstance()<br/>.connect(context, handler)<br/>binds the launcher's plugin service:<br/>takes the launcher out of the stopped state<br/>but doesn't enroll it or run its startup update"]
     B -- "false, or no answer within 15 s" --> X(["Ready: MDM agent not available"])
     B --> CB["↩ onHeadwindMDMConnected()"]
     CB --> C{"Agent running?<br/>enrolled: ⚙ getMdmAgentError() ≠ ERROR_NOT_CONFIGURED<br/>and not launcherStopped"}
     C -- "yes: running" --> G
-    C -- "no: not enrolled or launcherStopped<br/>agentInitialized = true" --> D{"Network with<br/>internet?<br/>▶ ConnectivityManager:<br/>NET_CAPABILITY_VALIDATED"}
+    C -- "✎ set true (no branch)" --o VA[("🔖 agentInitialized<br/>status variable")]
+    VA -- "👁 read" --o K
+    C -- "no: not enrolled or launcherStopped" --> D{"Network with<br/>internet?<br/>▶ ConnectivityManager:<br/>NET_CAPABILITY_VALIDATED"}
     D -- no --> E["👆 Configure WiFi: choose the network,<br/>type the password, Connect<br/>▶ WifiManager.addNetwork() + enableNetwork()<br/>wait for internet"]
     E --> F1
     D -- yes --> F1
@@ -78,7 +82,9 @@ flowchart TD
     classDef user fill:#d6eaf8,stroke:#2471a3,stroke-width:2px,color:#000
     classDef mdm fill:#fdebd0,stroke:#d35400,stroke-width:2px,color:#000
     classDef app fill:#d5f5e3,stroke:#1e8449,stroke-width:2px,color:#000
+    classDef var fill:#e8daef,stroke:#7d3c98,stroke-width:2px,stroke-dasharray:5 3,color:#000
     class A,E user
+    class VS,VA var
     class S,D,F1,F4 app
     class B,CB,C,G,R,RC,RC2,H,P1,P2,P3 mdm
 ```
@@ -88,6 +94,8 @@ flowchart TD
 🟧 Orange blocks: the `HeadwindMDM` library. ⚙ marks a call from the app (a method of `HeadwindMDM.getInstance()`), ↩ a callback to the app (`HeadwindMDM.EventHandler`, `HeadwindMDM.StartupGateListener`).
 
 🟩 Green blocks: the app's own actions through Android (package manager, connectivity, activities). ▶ marks an action of the app outside the hmdm library (Android APIs, `mdmlib`), ↩ an Android callback (`onStop()`).
+
+🟪 Purple cylinders, marked 🔖: the app's status variables. Lines ending in a circle (○) show where each one is set (✎) and where it is read (👁).
 
 White blocks: what other components do, or a result; nothing for the app to execute. Dashed arrows: the buttons of the ready screen.
 
