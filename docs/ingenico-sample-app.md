@@ -266,7 +266,9 @@ No, the launcher doesn't wait for the app. `awaitStartupUpdate()` doesn't start 
 - **At boot** the launcher starts the startup update by itself, as soon as it has the network: the app may not be running yet (the launcher starts it with *Run at boot* only at the end), and the other apps of the configuration are updated too. The app can't be in a payment during it, because it waits at the gate; so the launcher doesn't need the app's permission.
 - **During the day** the app chooses the moment with **`forceConfigUpdate()`** (the **Sync configuration** button): with launcher **6.55** or later it loads the configuration and installs and removes the apps right away, even with *Install app updates only at device startup* checked. Call it when the app can be closed, after the gate opened. See [Startup sync](startup-sync.md#sync-requested-by-an-app).
 
-So the two calls split the work: `awaitStartupUpdate()` waits for the update of the boot, `forceConfigUpdate()` asks for one now.
+- **When the launcher isn't running** (new device not enrolled, or force-stopped, so it missed the boot), what starts the update is starting the launcher's main screen: `startActivity(launcher's start intent)`, as in the [flow](#what-the-app-does). Its main screen enrolls it and runs the startup update. Calling `awaitStartupUpdate()` right after it, as this app does, is enough: the gate waits for that update and opens when the apps are installed. There is no need for `awaitStartupUpdate()` to start the update too.
+
+So the two calls split the work: `awaitStartupUpdate()` waits for the update of the boot (started by the launcher at boot, or by the app starting the launcher's main screen), `forceConfigUpdate()` asks for one now.
 
 ### Once the launcher has downloaded everything, does it close the app and update by itself, or do we still have to reboot?
 
