@@ -48,20 +48,20 @@ From then on the launcher starts the app at every boot (*Run at boot*), and the 
 
 ```mermaid
 flowchart TD
-    A["👆 Open the app"] --> S["Read the launcher's stopped state from the package manager:<br/>getPackageManager().getApplicationInfo(launcher, 0).flags<br/>#amp; ApplicationInfo.FLAG_STOPPED<br/>now, because connect() clears it"]
+    A["👆 Open the app"] --> S["▶ Read the launcher's stopped state from the package manager:<br/>getPackageManager().getApplicationInfo(launcher, 0).flags<br/>#amp; ApplicationInfo.FLAG_STOPPED<br/>now, because connect() clears it"]
     S --> B["⚙ HeadwindMDM.getInstance()<br/>.connect(context, handler)<br/>binds the launcher's plugin service:<br/>takes the launcher out of the stopped state<br/>but doesn't enroll it or run its startup update"]
     B -- "false, or no answer within 15 s" --> X(["Ready: MDM agent not available"])
     B --> CB["↩ onHeadwindMDMConnected()"]
     CB --> C{"Agent running?<br/>⚙ getMdmAgentError() ≠ ERROR_NOT_CONFIGURED<br/>and not stopped"}
     C -- yes --> G
-    C -- no --> D{"Network with<br/>internet?"}
-    D -- no --> E["👆 Configure WiFi: choose the network,<br/>type the password, Connect<br/>addNetwork, wait for internet"]
+    C -- no --> D{"Network with<br/>internet?<br/>▶ ConnectivityManager:<br/>NET_CAPABILITY_VALIDATED"}
+    D -- no --> E["👆 Configure WiFi: choose the network,<br/>type the password, Connect<br/>▶ WifiManager.addNetwork() + enableNetwork()<br/>wait for internet"]
     E --> F1
     D -- yes --> F1
     subgraph F ["Start the launcher's main screen: startAgent()"]
-        F1["startActivity(launcher's start intent):<br/>getLaunchIntentForPackage(), or its HOME activity<br/>+ FLAG_ACTIVITY_NEW_TASK"]
+        F1["▶ startActivity(launcher's start intent):<br/>getLaunchIntentForPackage(), or its HOME activity<br/>+ FLAG_ACTIVITY_NEW_TASK"]
         F1 --> F3["Launcher's MainActivity, in front:<br/>enrollment (init.json), configuration,<br/>startup update"]
-        F3 --> F4["The app's MainActivity.onStop():<br/>the app stays behind the launcher<br/>and waits at the startup gate"]
+        F3 --> F4["↩ The app's MainActivity.onStop():<br/>the app stays behind the launcher<br/>and waits at the startup gate"]
         F1 -. "launcher activity didn't start:<br/>onResume() without onStop()" .-> F5["Go on anyway"]
     end
     F4 --> G
@@ -73,17 +73,23 @@ flowchart TD
     RC2 --> H
     K -- no --> H(["Ready: operative<br/>⚙ getServerHost(), getDeviceId(), getMdmAgentError()"])
     H -.-> P1["Get device number<br/>⚙ disconnect() + connect()"]
-    H -.-> P2["Change device number<br/>⚙ getServerUrl(), getDeviceId()<br/>then the server's REST API<br/>↩ onHeadwindMDMConfigChanged()"]
+    H -.-> P2["Change device number<br/>⚙ getServerUrl(), getDeviceId()<br/>▶ MdmService.changeDevice():<br/>the server's REST API<br/>↩ onHeadwindMDMConfigChanged()"]
     H -.-> P3["Sync configuration<br/>⚙ forceConfigUpdate()<br/>↩ onHeadwindMDMConfigChanged()"]
     classDef user fill:#d6eaf8,stroke:#2471a3,stroke-width:2px,color:#000
     classDef mdm fill:#fdebd0,stroke:#d35400,stroke-width:2px,color:#000
+    classDef app fill:#d5f5e3,stroke:#1e8449,stroke-width:2px,color:#000
     class A,E user
+    class S,D,F1,F4 app
     class B,CB,C,G,R,RC,RC2,H,P1,P2,P3 mdm
 ```
 
 🟦 Blue blocks, marked 👆: the only steps which need the user.
 
-🟧 Orange blocks: the `HeadwindMDM` library. ⚙ marks a call from the app (a method of `HeadwindMDM.getInstance()`), ↩ a callback from the library to the app (`HeadwindMDM.EventHandler`, `HeadwindMDM.StartupGateListener`). Dashed arrows: the buttons of the ready screen.
+🟧 Orange blocks: the `HeadwindMDM` library. ⚙ marks a call from the app (a method of `HeadwindMDM.getInstance()`), ↩ a callback to the app (`HeadwindMDM.EventHandler`, `HeadwindMDM.StartupGateListener`).
+
+🟩 Green blocks: the app's own actions through Android (package manager, connectivity, activities). ▶ marks an action of the app outside the hmdm library (Android APIs, `mdmlib`), ↩ an Android callback (`onStop()`).
+
+White blocks: what other components do, or a result; nothing for the app to execute. Dashed arrows: the buttons of the ready screen.
 
 | Situation at start | What the app does |
 |---|---|
