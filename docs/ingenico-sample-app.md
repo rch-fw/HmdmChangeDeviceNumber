@@ -42,7 +42,7 @@ On a terminal fresh from the factory:
 
 From then on the launcher starts the app at every boot (*Run at boot*), and the app waits at the startup gate until the app updates are installed.
 
-> If the configuration marks another app as *Run at boot*, the launcher opens that one on top when the startup update ends. In the tests on the EX6000 the configuration still had the sample app (`com.mooney.mdm.sample`), which was installed and opened over this app.
+> If the configuration marks another app as *Run at boot*, the launcher opens that one on top when the startup update ends. In a test on the EX6000 the configuration still had the sample app (`com.mooney.mdm.sample`), which was installed and opened over this app.
 
 ## What the app does
 
@@ -211,18 +211,24 @@ Open the app on the terminal, choose the network, **Connect**, and follow:
 adb logcat -v time | grep -E "IngenicoSample|Startup update|Run at boot|Configuration updated|installed successfully"
 ```
 
-Run on the EX6000 (development terminal), launcher 6.54, app 1.0 (which still brought itself back to the front after starting the launcher), no saved network in range:
+Run on the EX6000 (development terminal), 2026-11-13, launcher 6.54, app 1.1, no saved network in range; the configuration has `com.mooney.mdm.ingenico` *Run at boot* and installs `com.hmdm.pager`:
 
 | Time | Event |
 |---|---|
-| 19:31:05 | App opened: `MDM agent not running (not enrolled)`, `No network: configure WiFi` |
-| 19:31:35 | Network chosen, password typed, **Connect**: `network RUT200_FA74 added` |
-| 19:31:39 | `connected to RUT200_FA74 with internet`; the app starts the launcher, `back to the front`; startup gate waiting (launcher: `Startup update awaited before the enrollment, timeout not started`) |
-| 19:31:41 | Launcher: enrolled, `Configuration updated` |
-| 19:31:42–52 | Startup update installs `com.hmdm.pager` and `com.mooney.mdm.sample`; the app shows each download and install |
-| 19:31:53 | `Startup update completed`; the app: `Startup gate: open`, `Operative`, device number shown |
+| 07:06:31.4 | App opened: `connect()` starts the launcher's process (it reads the serial number through USDK) |
+| 07:06:31.7 | `MDM agent not running (not enrolled): initializing the device`, `No network: configure WiFi` (the hmdm library also prints `MDMException: Mobile agent is not configured`: expected before the enrollment) |
+| 07:07:02.7 | Network chosen, password typed, **Connect**: `network RUT200_FA74 added` |
+| 07:07:06.8 | `connected to RUT200_FA74 with internet`; the app starts the launcher's `MainActivity` |
+| 07:07:07.1 | Launcher: `Reading enrollment settings from the APK assets` |
+| 07:07:07.9 | App: `MDM agent started, waiting behind it`, startup gate waiting; launcher: `Startup update awaited before the enrollment, timeout not started` |
+| 07:07:09.0 | Launcher: enrolled, `Configuration updated` |
+| 07:07:09.7–16.0 | Startup update downloads and installs `com.hmdm.pager`; the app, behind the launcher, follows each step |
+| 07:07:16.6 | `Startup update completed`; the app: `Startup gate: open`, `Operative`, device number shown |
+| 07:07:21.7 | Launcher: `Run at boot: started com.mooney.mdm.ingenico`: the app's screen is back in front (the same instance, with its state) |
 
-18 s from **Connect** to operative, no reboot.
+14 s from **Connect** to operative, 19 s to the app back in front, no reboot. Between the two the launcher's screen is in front: the launcher starts the *Run at boot* apps about 5 s after the startup update ends.
+
+An earlier run with app 1.0 (which brought itself back to the front right after starting the launcher, and a configuration with the sample app *Run at boot*): 18 s from **Connect** to operative; then the sample app, installed by the startup update, opened over this app.
 
 ### Agent running
 
