@@ -56,9 +56,17 @@ flowchart TD
     C -- yes --> G
     C -- no --> D{"Network with<br/>internet?"}
     D -- no --> E["👆 Configure WiFi: choose the network,<br/>type the password, Connect<br/>addNetwork, wait for internet"]
-    E --> F
-    D -- yes --> F["Start the launcher's main screen<br/>and come back to the front<br/>the launcher enrolls"]
-    F --> G["⚙ awaitStartupUpdate(StartupGateListener)<br/>startup gate: waits for the app updates of this boot<br/>onAppDownloading / onAppInstalling / onDownloadProgress"]
+    E --> F1
+    D -- yes --> F1
+    subgraph F ["Start the launcher's main screen and come back to the front: startAgent()"]
+        F1["Launcher's start intent:<br/>getLaunchIntentForPackage(), or its HOME activity<br/>+ FLAG_ACTIVITY_NEW_TASK<br/>returnFromLauncher = true"]
+        F1 --> F2["LauncherStarterActivity, invisible:<br/>starts the launcher's MainActivity and finishes at once.<br/>Finishing an activity gives the app 10 s<br/>in which Android 10 lets it start an activity from the background"]
+        F2 --> F3["Launcher's MainActivity, in front:<br/>enrollment (init.json), configuration,<br/>startup update: they go on in the background"]
+        F3 --> F4["The app's MainActivity.onStop():<br/>startActivity(MainActivity, FLAG_ACTIVITY_REORDER_TO_FRONT)<br/>the app is back in front"]
+        F2 -. "launcher activity didn't start:<br/>onResume() without onStop()" .-> F5["Go on anyway"]
+    end
+    F4 --> G
+    F5 --> G["⚙ awaitStartupUpdate(StartupGateListener)<br/>startup gate: waits for the app updates of this boot<br/>onAppDownloading / onAppInstalling / onDownloadProgress"]
     G --> R["⚙ onReady(reason)<br/>STARTUP_READY · STARTUP_TIMEOUT · STARTUP_NO_MDM"]
     R --> K{"Launcher started<br/>by the app?"}
     K -- yes --> RC["⚙ disconnect() + connect()<br/>the data read at the first connection<br/>was from before the enrollment"]
