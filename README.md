@@ -149,9 +149,11 @@ now (`HeadwindMDM.forceConfigUpdate()`), for example after the network has been 
 
 - It is shown only once the startup gate is open: during the startup update it would start a second
   configuration update in parallel (see [Startup sync](docs/startup-sync.md), rule 5).
-- During the day, with **Install app updates only at device startup** checked (the default), the
-  update applies settings, policies, files and remote commands, and leaves app installs and removals
-  for the next boot: use **Reboot device** to install them.
+- With launcher **6.55** or later it also installs and removes apps right away, as the startup
+  update does, even with **Install app updates only at device startup** checked: the app asked for
+  it, so it accepts being killed if the configuration has a new version of it (or of the app in
+  use). With older launchers, and with the option checked (the default), app installs and removals
+  wait for the next boot: use **Reboot device** to install them.
 - While the launcher updates the configuration, the app shows "Syncing configuration, please wait"
   and hides the buttons which need the MDM agent. It goes back to normal when the launcher reports
   the end of the update (the `com.hmdm.push.configUpdated` broadcast, `onHeadwindMDMConfigChanged()`):

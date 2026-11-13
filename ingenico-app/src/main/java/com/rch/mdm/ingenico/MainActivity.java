@@ -526,9 +526,9 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     }
 
     /**
-     * Asks the launcher to load its configuration now (settings, policies; during the day app
-     * installs wait for the next boot). Only once operative: during the startup update it would
-     * start a second update in parallel.
+     * Asks the launcher to load its configuration now: settings, policies and, with launcher 6.55
+     * or later, app installs and removals (older launchers leave them for the next boot). Only once
+     * operative: during the startup update it would start a second update in parallel.
      */
     private void syncConfig() {
         headwindMDM.forceConfigUpdate();

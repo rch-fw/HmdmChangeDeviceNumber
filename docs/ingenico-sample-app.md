@@ -111,7 +111,7 @@ flowchart TD
 |---|---|
 | **Get device number** | Reconnects to the MDM agent, which reads its configuration again, and shows the server and the device number. |
 | **Change device number** | Asks the MDM server username and password, a new device number and/or groups (comma-separated; empty = unchanged), and updates the device on the server through its REST API (`mdmlib`, `MdmService.changeDevice()`), as in the sample app. On a rename the server sends the device a `configUpdated` push; when the launcher has reloaded its configuration, the app reads the device number again by itself. The MDM user needs the `rename_device` permission. The password is never logged. |
-| **Sync configuration** | Asks the launcher to load its configuration now (`forceConfigUpdate()`), and shows *Syncing configuration…* until the launcher's `configUpdated` broadcast, at most 90 s (the launcher reports only successful updates). Settings and policies are applied now; app installs and removals wait for the next boot. |
+| **Sync configuration** | Asks the launcher to load its configuration now (`forceConfigUpdate()`), and shows *Syncing configuration…* until the launcher's `configUpdated` broadcast, at most 90 s (the launcher reports only successful updates). Settings, policies and, with launcher 6.55 or later, app installs and removals are applied now (the app may be killed if the configuration has a new version of it); with older launchers the apps wait for the next boot. |
 | **Configure WiFi** | The WiFi screen, to change the network. |
 
 ## How it works

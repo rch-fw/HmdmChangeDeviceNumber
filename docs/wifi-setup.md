@@ -194,7 +194,7 @@ The approval is asked once per app install; later suggestions of the same app co
 The same applies after `addNetwork`. The device is connected without a reboot:
 
 - **Launcher not enrolled yet** (new device): the app starts the launcher's main screen. The launcher enrolls, loads the configuration and installs the apps in this boot (launcher 6.54: its startup update stayed open). A sync request doesn't help here: the launcher isn't enrolled, and the request fails (tested: `network error`, 6 retries).
-- **Launcher already enrolled**, startup update over (for example it was enrolled earlier in a boot without network, with launcher 6.53 or earlier, or after the 3 minutes): a **sync request** (see [Sync request: availability](#sync-request-availability)) loads the configuration and applies settings, policies, files and remote commands; the apps wait for the next boot, so **reboot** to install them.
+- **Launcher already enrolled**, startup update over (for example it was enrolled earlier in a boot without network, with launcher 6.53 or earlier, or after the 3 minutes): a **sync request** (see [Sync request: availability](#sync-request-availability)) loads the configuration and applies settings, policies, files and remote commands; with launcher 6.55 or later it installs the apps too, with older launchers they wait for the next boot, so **reboot** to install them.
 
 The app waits for the connection with a `NetworkCallback` (`NET_CAPABILITY_VALIDATED`).
 
@@ -370,7 +370,7 @@ The launcher (plugin API, any version since 1.1.5) loads the configuration from 
 Rules:
 
 - **Not during the startup update:** it would start a second configuration update in parallel. Call it after the startup gate opened (`onReady()`).
-- **During the day** (default configuration option) it applies settings, policies, files and remote commands, but app installs and removals wait for the next boot.
+- **During the day** it applies settings, policies, files and remote commands, and installs and removes apps right away (launcher 6.55 or later, see [Startup sync](startup-sync.md#sync-requested-by-an-app)). With older launchers and the default configuration option, app installs and removals wait for the next boot.
 - On a network error the launcher retries 6 times every 10 s before giving up.
 
 The sample app's **Sync configuration** button uses `HeadwindMDM.forceConfigUpdate()`: it is shown once the startup gate is open, and shows "Syncing configuration, please wait" until the launcher's `configUpdated` broadcast, or for at most 90 s, because the launcher sends nothing when the update fails. `ConfigUpdateListener` would report the errors as well.

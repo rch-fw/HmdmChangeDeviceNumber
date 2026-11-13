@@ -8,7 +8,7 @@ On the Ingenico terminals the launcher is **not in kiosk mode** and is not the h
 
 When the launcher installs a new version of an app, or removes it, Android kills the app's process. If that happens in the middle of a payment, the payment is lost.
 
-So the launcher installs and removes apps **only during the startup update**: the first configuration update after the device boots. Configuration updates later in the day (push, the periodic check, the update button, plugin calls) apply everything else (settings, policies, files, remote commands) but leave app installs and removals for the next boot. This is on by default and can be turned off per configuration (see [Configuration option](#configuration-option)).
+So the launcher installs and removes apps **only during the startup update**: the first configuration update after the device boots. Configuration updates later in the day (push, the periodic check, the launcher's own screens) apply everything else (settings, policies, files, remote commands) but leave app installs and removals for the next boot. The exception is a sync requested by an app through the plugin API (`forceConfigUpdate()`, launcher 6.55 or later): it installs and removes apps right away, see [Sync requested by an app](#sync-requested-by-an-app). This is on by default and can be turned off per configuration (see [Configuration option](#configuration-option)).
 
 At boot the app may already be running while the launcher installs updates: the user can open it from the home screen before the startup update is over. The app therefore asks the launcher whether the startup update is over and waits until it is: the **startup gate**. While it waits it is idle, so if the launcher replaces it, nothing is lost.
 
@@ -152,7 +152,7 @@ The complete example is in [`MainActivity.java`](../app/src/main/java/com/rch/md
 2. **Call it on every start of the launch activity**, not only at boot. After boot the answer comes back immediately, so it costs nothing, and the app doesn't have to know whether it was started by a boot.
 3. **Expect to be killed while waiting.** If the launcher updates the app, the process dies; the launcher starts the new version if the app is marked *Run after install* or *Run at boot* (otherwise the user opens it again), and it calls `awaitStartupUpdate` again and gets "over" at once. Don't save anything while waiting that a kill would leave half done.
 4. **Don't wait in a boot receiver.** Since Android 10 an app can't start an activity from the background, so a `BOOT_COMPLETED` receiver which opens the app's UI doesn't work reliably. To have the app started after boot, mark it *Run at boot* in the configuration: the launcher starts it when the startup update is over; the gate in the launch activity covers that start, and a start by the user from the home screen too. If the app has a boot receiver for other work (for example to start a service), that work must follow the same rule 1, or wait for the gate too.
-5. **Don't call `forceConfigUpdate()` to "speed up" the startup update**: it starts a second configuration update in parallel. During the day it updates the configuration but doesn't install apps.
+5. **Don't call `forceConfigUpdate()` to "speed up" the startup update**: it starts a second configuration update in parallel. During the day it updates the configuration and, with launcher 6.55 or later, installs the apps too (see [Sync requested by an app](#sync-requested-by-an-app)): call it only when nothing must be interrupted.
 
 ## Lower-level API
 
@@ -172,7 +172,7 @@ Whether app changes wait for the next boot is set per configuration in the web p
 
 | Checkbox | Behaviour |
 |---|---|
-| Checked (default) | Apps are installed and removed only during the startup update. Configuration updates during the day leave app changes for the next boot. |
+| Checked (default) | Apps are installed and removed only during the startup update, and by a sync requested by an app (launcher 6.55 or later). The other configuration updates during the day leave app changes for the next boot. |
 | Unchecked | Apps are also installed and removed during the day, right after a configuration update, as in the standard Headwind MDM. The app may be killed while in use. |
 
 The checkbox is checked for existing configurations and for new ones. Changing it reaches the devices with the next configuration update, like any other setting.
@@ -181,11 +181,22 @@ The server sends it to the device in the configuration JSON as `appUpdateAtStart
 
 With either value, the startup update and the startup gate work the same way: the gate is still needed, because the startup update installs apps right after boot.
 
+## Sync requested by an app
+
+With launcher **6.55** or later, a configuration update requested by an app through the plugin API (`HeadwindMDM.forceConfigUpdate()`, `MDMService.forceConfigUpdate(ConfigUpdateListener)`) installs and removes apps **right away**, as the startup update does, even with **Install app updates only at device startup** checked. The app asked for it at a moment it chose, so it accepts that installing an app kills it.
+
+- The launcher writes `N app update(s) requested by an app, installing now` in the device log.
+- If the startup update is still running, the apps are left to it (`left to the startup update in progress`): two updates never install at the same time. Call it after the startup gate opened.
+- The other updates (server push, the periodic check, the launcher's own screens) still leave the apps for the next boot.
+- If the configuration has a new version of the calling app, the app is killed during the sync; the launcher starts the new version if it is marked *Run after install*, otherwise the user opens it again.
+- The time window and "WiFi only" options don't apply: the request counts as a user action.
+- With launcher 6.54 or earlier, the sync doesn't install apps when the option is checked.
+
 ## Operator notes
 
-- In the configuration, app updates are released as usual (new version, action **Install**). With the default setting, devices install them **at the next boot**, not when the configuration is saved. To apply an update right away, reboot the device (from the web panel or by hand), or uncheck **Install app updates only at device startup** in the configuration.
+- In the configuration, app updates are released as usual (new version, action **Install**). With the default setting, devices install them **at the next boot**, not when the configuration is saved. To apply an update right away, reboot the device (from the web panel or by hand), tap **Sync configuration** in the app (launcher 6.55 or later), or uncheck **Install app updates only at device startup** in the configuration.
 - The configuration's app update time window and "WiFi only" option still apply to the startup update. If a device boots outside the window, its app updates wait for the next boot within the window.
-- The launcher writes `N app update(s) deferred to the next boot` in the device log when a configuration update during the day skips app changes. A configuration update which runs while the startup update is still installing apps writes `N app update(s) left to the startup update in progress` to logcat instead (launcher 6.45 or later): those updates are installed by the startup update, not deferred.
+- The launcher writes `N app update(s) deferred to the next boot` in the device log when a configuration update during the day skips app changes, and `N app update(s) requested by an app, installing now` when a sync requested by an app installs them. A configuration update which runs while the startup update is still installing apps writes `N app update(s) left to the startup update in progress` to logcat instead (launcher 6.45 or later): those updates are installed by the startup update, not deferred.
 
 ## Rebooting from the app
 
@@ -212,6 +223,7 @@ Device connected with `adb`. Launcher and sample app log together (the sample's 
 | Update pending at boot | Release a new version of the app in the configuration, then `adb reboot`. | The app shows the wait screen, the launcher installs the new version, the new version starts and opens the gate (`STARTUP_READY`). |
 | Nothing to update | `adb reboot` with no change in the configuration. | The gate opens within a few seconds. |
 | Update during the day | Release a new version without rebooting (default setting). | The running app isn't killed; the log shows `app update(s) deferred to the next boot`; the update is installed at the next reboot. |
+| Sync requested by the app | Release a new version, or uninstall an app of the configuration with `adb uninstall`, then tap **Sync configuration** (launcher 6.55 or later, option checked). | The log shows `app update(s) requested by an app, installing now`; the app is installed right away. Tested on the EX6000: `com.hmdm.pager` reinstalled in 10 s, while the launcher's own update just before wrote `1 app update(s) deferred to the next boot`. |
 | Option turned off | Uncheck **Install app updates only at device startup**, save, then release a new version. | The update is installed right away, without a reboot (the running app is killed). |
 | No network at boot | Disable WiFi / mobile data, `adb reboot`. | The gate opens after the launcher gives up loading the configuration (at the latest after 3 minutes). |
 | App restart | Close and reopen the app during the day. | The gate opens immediately. |

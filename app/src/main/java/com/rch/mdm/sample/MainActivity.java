@@ -362,8 +362,9 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     /**
      * Asks the launcher to load the configuration from the server now.
      * Shown only once the startup gate is open: during the startup update it would start a second
-     * configuration update in parallel. During the day (default configuration option) the update
-     * applies settings and policies, and leaves app installs and removals for the next boot.
+     * configuration update in parallel. During the day the update applies settings and policies,
+     * and with launcher 6.55 or later installs and removes apps too (older launchers, with the
+     * default configuration option, leave them for the next boot).
      */
     private void syncConfig() {
         log("Requesting configuration sync...");
