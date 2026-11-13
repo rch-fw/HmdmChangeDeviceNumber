@@ -82,7 +82,7 @@ def usdkJar = file('libs/usdk_api_aidl_v13.12.0.20240202.jar')
 dependencies {
     implementation project(':mdmlib')
     implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation files('libs/hmdm-1.2.2.aar')
+    implementation files('libs/hmdm-1.2.3.aar')
     // Ingenico USDK (WiFi configuration): proprietary, not in the repository, see the README
     implementation files(usdkJar)
 }

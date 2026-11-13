@@ -57,5 +57,5 @@ dependencies {
     // Device number and groups through the MDM server's REST API (Change device number)
     implementation project(':mdmlib')
     // Headwind MDM library, the same as the sample app's
-    implementation files('../app/libs/hmdm-1.2.2.aar')
+    implementation files('../app/libs/hmdm-1.2.3.aar')
 }

@@ -16,7 +16,7 @@ It is much simpler than the Ingenico app, because on Sunmi terminals:
 |---|---|
 | MDM launcher `com.hmdm.launcher`, device owner, enrolled | Set up by the provisioning procedure |
 | Network already set up | The app doesn't configure it |
-| hmdm library 1.2.2 (`app/libs/hmdm-1.2.2.aar`) | Connection to the launcher and startup gate |
+| hmdm library 1.2.3 (`app/libs/hmdm-1.2.3.aar`) | Connection to the launcher and startup gate |
 | `mdmlib` (this repository) | Only for **Change device number** |
 
 ## Deployment

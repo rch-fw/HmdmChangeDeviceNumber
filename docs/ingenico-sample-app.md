@@ -25,7 +25,7 @@ Contents:
 | MDM launcher `com.hmdm.launcher.ingenico` **6.54** or later, installed | Before its enrollment, 6.54 keeps its startup update open: the WiFi setup can take as long as needed and the apps are still installed in the same boot. With older launchers the apps may wait for one more reboot. |
 | The launcher's enrollment settings in its APK (`init.json`, Ingenico flavor) | The launcher enrolls by itself when its main screen opens: server, project, device ID from the serial number. |
 | The app **targets SDK 28** | Android 10 lets only apps targeting SDK 28 or lower add a WiFi network (`WifiManager.addNetwork()`). See [Limits](#limits). |
-| hmdm library 1.2.2 (`app/libs/hmdm-1.2.2.aar`) | Connection to the launcher and startup gate. 1.2.2 or later: earlier versions crash when the launcher has no configuration yet. |
+| hmdm library 1.2.3 (`app/libs/hmdm-1.2.3.aar`) | Connection to the launcher, startup gate and `HeadwindMDM.startLauncher()` (1.2.3 or later; 1.2.1 and earlier also crash when the launcher has no configuration yet). |
 | `mdmlib` (this repository) | Only for **Change device number**. |
 
 The Ingenico USDK is not used, so any signing key works. The build uses the launcher's key when it is configured (see [Build](#build)).
@@ -61,7 +61,7 @@ flowchart TD
     E --> F1
     D -- yes --> F1
     subgraph F ["Start the launcher's main screen: startAgent()"]
-        F1["▶ startActivity(launcher's start intent):<br/>getLaunchIntentForPackage(), or its HOME activity<br/>+ FLAG_ACTIVITY_NEW_TASK"]
+        F1["⚙ HeadwindMDM.startLauncher(context):<br/>startActivity(launcher's launch intent,<br/>or its HOME activity) + FLAG_ACTIVITY_NEW_TASK"]
         F1 --> F3["Launcher's MainActivity, in front:<br/>enrollment (init.json), configuration,<br/>startup update"]
         F3 --> F4["↩ The app's MainActivity.onStop()<br/>(the launcher's screen covers the app):<br/>calls ⚙ awaitStartupUpdate() through synchronize()<br/>the app stays behind the launcher and waits at the gate"]
         F1 -. "launcher activity didn't start:<br/>onResume() without onStop()" .-> F5["↩ The app's MainActivity.onResume():<br/>calls ⚙ awaitStartupUpdate() through synchronize()<br/>anyway"]
@@ -161,7 +161,7 @@ Details and tests: [WiFi setup](wifi-setup.md#addnetwork-from-an-app-targeting-s
 
 ### 3. Starting the launcher
 
-The app starts the launcher's main activity (`getLaunchIntentForPackage()`, or its HOME activity) with `startActivity()`; the launcher enrolls (`init.json`) and runs its startup update.
+The app starts the launcher's main activity with `HeadwindMDM.startLauncher()` (hmdm library 1.2.3: `startActivity()` with the launcher's launch intent, or its HOME activity); the launcher enrolls (`init.json`) and runs its startup update.
 
 The app doesn't bring itself back to the front (since version 1.1):
 
@@ -191,7 +191,7 @@ The app reconnects (`disconnect()` + `connect()`) and shows the server and the d
 ## Doing the same in your app
 
 1. **Manifest:** `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`, `ACCESS_FINE_LOCATION` (network list; the Ingenico firmware grants it at install); `<queries>` for `com.hmdm.launcher` and `com.hmdm.launcher.ingenico`; the launch activity `singleTask` (the launcher's *Run at boot* then brings back the existing screen, with its state).
-2. **Gradle:** `targetSdk 28`, and in `lint` disable `ExpiredTargetSdkVersion` and `OldTargetApi`; the hmdm library 1.2.2 or later.
+2. **Gradle:** `targetSdk 28`, and in `lint` disable `ExpiredTargetSdkVersion` and `OldTargetApi`; the hmdm library 1.2.3 or later (`HeadwindMDM.startLauncher()`).
 3. **At start:** read the stopped state, connect, decide in `onHeadwindMDMConnected()` (section [1](#1-is-the-agent-running)).
 4. **Not running:** WiFi if there is no validated network ([2](#2-wifi)), start the launcher ([3](#3-starting-the-launcher)), then the startup gate; the app *Run at boot* in the configuration, so the launcher brings it back.
 5. **Running:** the startup gate only ([4](#4-startup-gate)).
@@ -266,7 +266,7 @@ No, the launcher doesn't wait for the app. `awaitStartupUpdate()` doesn't start 
 - **At boot** the launcher starts the startup update by itself, as soon as it has the network: the app may not be running yet (the launcher starts it with *Run at boot* only at the end), and the other apps of the configuration are updated too. The app can't be in a payment during it, because it waits at the gate; so the launcher doesn't need the app's permission.
 - **During the day** the app chooses the moment with **`forceConfigUpdate()`** (the **Sync configuration** button): with launcher **6.55** or later it loads the configuration and installs and removes the apps right away, even with *Install app updates only at device startup* checked. Call it when the app can be closed, after the gate opened. See [Startup sync](startup-sync.md#sync-requested-by-an-app).
 
-- **When the launcher isn't running** (new device not enrolled, or force-stopped, so it missed the boot), what starts the update is starting the launcher's main screen: `startActivity(launcher's start intent)`, as in the [flow](#what-the-app-does). Its main screen enrolls it and runs the startup update. Calling `awaitStartupUpdate()` right after it, as this app does, is enough: the gate waits for that update and opens when the apps are installed. There is no need for `awaitStartupUpdate()` to start the update too.
+- **When the launcher isn't running** (new device not enrolled, or force-stopped, so it missed the boot), what starts the update is starting the launcher's main screen: `HeadwindMDM.startLauncher()`, as in the [flow](#what-the-app-does). Its main screen enrolls it and runs the startup update. Calling `awaitStartupUpdate()` right after it, as this app does, is enough: the gate waits for that update and opens when the apps are installed. There is no need for `awaitStartupUpdate()` to start the update too.
 
 So the two calls split the work: `awaitStartupUpdate()` waits for the update of the boot (started by the launcher at boot, or by the app starting the launcher's main screen), `forceConfigUpdate()` asks for one now.
 
@@ -311,4 +311,4 @@ No reboot, as long as the update runs at boot or from the app's sync:
 APK: `ingenico-app/build/outputs/apk/<type>/ingenico_sample_app-<version>-<type>.apk`.
 
 - Signed with the launcher's key when `RELEASE_M10_STORE_FILE`, `RELEASE_M10_KEY_ALIAS`, `RELEASE_M10_STORE_PASSWORD` and `RELEASE_M10_KEY_PASSWORD` are set in `~/.gradle/gradle.properties`, otherwise with the debug key. An APK signed with another key can't update an installed one: uninstall first.
-- Uses `app/libs/hmdm-1.2.2.aar` (shared with the sample app) and the `mdmlib` module; not the Ingenico USDK.
+- Uses `app/libs/hmdm-1.2.3.aar` (shared with the sample app) and the `mdmlib` module; not the Ingenico USDK.

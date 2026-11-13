@@ -3,12 +3,10 @@ package com.rch.mdm.ingenico;
 import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -75,9 +73,6 @@ import java.util.Map;
 public class MainActivity extends AppCompatActivity implements HeadwindMDM.EventHandler {
 
     static final String TAG = "IngenicoSample";
-
-    /** MDM launcher packages, in the order the hmdm library tries them: standard, Ingenico flavor. */
-    private static final String[] LAUNCHER_PACKAGES = { "com.hmdm.launcher", "com.hmdm.launcher.ingenico" };
 
     private static final long CONNECT_TIMEOUT_MS = 15 * 1000;
     // addNetwork connects in a few seconds: after this, hint at a wrong password or no signal
@@ -198,7 +193,7 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         findViewById(R.id.wifiButton).setOnClickListener(v -> showWifi());
         setUpWifiPanel();
 
-        String launcher = installedLauncher();
+        String launcher = HeadwindMDM.getLauncherPackage(this);
         if (launcher == null) {
             log("MDM launcher not installed");
             ready("MDM agent not installed");
@@ -309,24 +304,18 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         }
     }
 
-    /** Starts the launcher's main screen, which enrolls it and runs its startup update. */
+    /**
+     * Starts the launcher's main screen (hmdm library 1.2.3, HeadwindMDM.startLauncher()), which
+     * enrolls it and runs its startup update.
+     */
     private void startAgent() {
-        String pkg = installedLauncher();
-        Intent intent = pkg == null ? null : launcherIntent(pkg);
-        if (intent == null) {
-            log("FAILED to start the MDM agent: no activity to start");
-            synchronize();
-            return;
-        }
         setStep(State.STARTING_AGENT, "Starting the MDM agent", "It enrolls and loads its configuration");
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         launcherStarting = true;
-        try {
-            startActivity(intent);
-            log("Starting " + intent.getComponent().flattenToShortString());
-        } catch (ActivityNotFoundException | SecurityException e) {
+        if (HeadwindMDM.startLauncher(this)) {
+            log("Starting the MDM agent's main screen");
+        } else {
             launcherStarting = false;
-            log("FAILED to start the MDM agent: " + e);
+            log("FAILED to start the MDM agent (details in logcat, tag HeadwindMDM)");
             synchronize();
         }
     }
@@ -551,40 +540,12 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         }
     }
 
-    /** The installed MDM launcher package, or null. */
-    private String installedLauncher() {
-        for (String pkg : LAUNCHER_PACKAGES) {
-            try {
-                getPackageManager().getApplicationInfo(pkg, 0);
-                return pkg;
-            } catch (PackageManager.NameNotFoundException e) {
-                // Try the next package
-            }
-        }
-        return null;
-    }
-
     private boolean isStopped(String pkg) {
         try {
             return (getPackageManager().getApplicationInfo(pkg, 0).flags & ApplicationInfo.FLAG_STOPPED) != 0;
         } catch (PackageManager.NameNotFoundException e) {
             return false;
         }
-    }
-
-    /** Intent to the main activity of pkg (or its HOME activity), null if none. */
-    private Intent launcherIntent(String pkg) {
-        Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);
-        if (intent != null) {
-            return intent;
-        }
-        Intent home = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(pkg);
-        List<ResolveInfo> activities = getPackageManager().queryIntentActivities(home, 0);
-        if (activities.isEmpty()) {
-            return null;
-        }
-        ResolveInfo info = activities.get(0);
-        return home.setClassName(info.activityInfo.packageName, info.activityInfo.name);
     }
 
     // ---- WiFi ----
