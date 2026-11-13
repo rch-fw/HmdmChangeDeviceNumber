@@ -97,8 +97,6 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
 
     /** The launcher was stopped when the app started (read before connecting: binding clears it). */
     private boolean launcherStopped;
-    /** The app started the launcher: read the device data again once operative. */
-    private boolean agentInitialized;
     /** Set while the launcher's activity is being started: synchronize in onStop(). */
     private boolean launcherStarting;
     private boolean syncing;
@@ -277,7 +275,6 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         boolean notEnrolled = headwindMDM.getMdmAgentError() == MDMError.ERROR_NOT_CONFIGURED;
         if (notEnrolled || launcherStopped) {
             log("MDM agent not running (" + (notEnrolled ? "not enrolled" : "stopped") + "): initializing the device");
-            agentInitialized = true;
             if (WifiSetup.hasInternet(connectivityManager)) {
                 log("Network already connected");
                 startAgent();
@@ -397,14 +394,15 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         findViewById(R.id.changeButton).setVisibility(agentButtons);
         findViewById(R.id.syncButton).setVisibility(agentButtons);
         log("Operative");
-        if (agentInitialized && headwindMDM != null) {
-            // The data read at the connection was from before the enrollment
-            agentInitialized = false;
+        if (headwindMDM != null) {
+            // Read the device data again: if the app started the launcher, the data read at the
+            // first connection was from before the enrollment. onHeadwindMDMConnected() shows it.
             headwindMDM.disconnect(this);
-            headwindMDM.connect(this, this);
-        } else {
-            showDeviceInfo();
+            if (headwindMDM.connect(this, this)) {
+                return;
+            }
         }
+        showDeviceInfo();
     }
 
     private void showDeviceInfo() {

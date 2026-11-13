@@ -56,8 +56,6 @@ flowchart TD
     B --> CB["↩ onHeadwindMDMConnected()"]
     CB --> C{"Agent running?<br/>enrolled: ⚙ getMdmAgentError() ≠ ERROR_NOT_CONFIGURED<br/>and not launcherStopped"}
     C -- "yes: running" --> G
-    C -- "✎ set true (no branch)" --o VA[("🔖 agentInitialized<br/>status variable")]
-    VA -- "👁 read" --o K
     C -- "no: not enrolled or launcherStopped" --> D{"Network with<br/>internet?<br/>▶ ConnectivityManager:<br/>NET_CAPABILITY_VALIDATED"}
     D -- no --> E["👆 Configure WiFi: choose the network,<br/>type the password, Connect<br/>▶ WifiManager.addNetwork() + enableNetwork()<br/>wait for internet"]
     E --> F1
@@ -71,11 +69,10 @@ flowchart TD
     F4 --> G
     F5 --> G["⚙ awaitStartupUpdate(StartupGateListener)<br/>startup gate: waits for the app updates of this boot<br/>↩ onAppDownloading / onAppInstalling / onDownloadProgress"]
     G -- "startup update over:<br/>Run at boot brings the app back to the front" --> R["↩ onReady(reason)<br/>STARTUP_READY · STARTUP_TIMEOUT · STARTUP_NO_MDM"]
-    R --> K{"agentInitialized?<br/>launcher started by the app<br/>(not enrolled or stopped)"}
-    K -- yes --> RC["⚙ disconnect() + connect()<br/>the data read at the first connection<br/>was from before the enrollment"]
+    R --> RC["⚙ disconnect() + connect()<br/>reads the device data again: if the app started the launcher,<br/>the data read at the first connection was from before the enrollment"]
     RC --> RC2["↩ onHeadwindMDMConnected()"]
     RC2 --> H
-    K -- no --> H(["Ready: operative<br/>⚙ getServerHost(), getDeviceId(), getMdmAgentError()"])
+    H(["Ready: operative<br/>⚙ getServerHost(), getDeviceId(), getMdmAgentError()"])
     H -.-> P1["Get device number<br/>⚙ disconnect() + connect()"]
     H -.-> P2["Change device number<br/>⚙ getServerUrl(), getDeviceId()<br/>▶ MdmService.changeDevice():<br/>the server's REST API<br/>↩ onHeadwindMDMConfigChanged()"]
     H -.-> P3["Sync configuration<br/>⚙ forceConfigUpdate()<br/>↩ onHeadwindMDMConfigChanged()"]
@@ -84,7 +81,7 @@ flowchart TD
     classDef app fill:#d5f5e3,stroke:#1e8449,stroke-width:2px,color:#000
     classDef var fill:#e8daef,stroke:#7d3c98,stroke-width:2px,stroke-dasharray:5 3,color:#000
     class A,E user
-    class VS,VA var
+    class VS var
     class S,D,F1,F4 app
     class B,CB,C,G,R,RC,RC2,H,P1,P2,P3 mdm
 ```
@@ -189,7 +186,7 @@ Details: [Startup sync](startup-sync.md).
 
 ### 5. Ready
 
-If the app started the agent, it reconnects to read the data of the enrolled launcher (the data read at the first connection was from before the enrollment), then shows the server and the device number.
+The app reconnects (`disconnect()` + `connect()`) and shows the server and the device number when `onHeadwindMDMConnected()` arrives. The reconnection is needed when the app started the launcher (the data read at the first connection was from before the enrollment); it is done every time, since version 1.2, because it costs only a bind and keeps the flow simple. If the reconnection can't start, the app shows the data it has.
 
 ## Doing the same in your app
 
@@ -214,7 +211,7 @@ adb uninstall com.hmdm.launcher.ingenico
 adb uninstall com.hmdm.pager               # and the other apps the configuration installs
 # Forget any other saved network for the test WiFi in the settings, then:
 adb install hmdm-launcher-ingenico-release-6.54.apk
-adb install ingenico_sample_app-1.1-debug.apk
+adb install ingenico_sample_app-1.2-debug.apk
 adb shell dumpsys package com.hmdm.launcher.ingenico | grep stopped   # stopped=true
 adb logcat -c
 ```
