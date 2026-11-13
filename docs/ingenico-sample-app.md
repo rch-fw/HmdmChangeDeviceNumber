@@ -51,7 +51,7 @@ flowchart TD
     A["👆 Open the app"] --> S["Read the launcher's stopped state<br/>ApplicationInfo.FLAG_STOPPED<br/>before connecting"]
     S --> B["⚙ HeadwindMDM.getInstance()<br/>.connect(context, handler)<br/>binds the launcher's plugin service:<br/>takes the launcher out of the stopped state<br/>but doesn't enroll it or run its startup update"]
     B -- "false, or no answer within 15 s" --> X(["Ready: MDM agent not available"])
-    B --> CB["⚙ onHeadwindMDMConnected()"]
+    B --> CB["↩ onHeadwindMDMConnected()"]
     CB --> C{"Agent running?<br/>⚙ getMdmAgentError() ≠ ERROR_NOT_CONFIGURED<br/>and not stopped"}
     C -- yes --> G
     C -- no --> D{"Network with<br/>internet?"}
@@ -65,16 +65,16 @@ flowchart TD
         F1 -. "launcher activity didn't start:<br/>onResume() without onStop()" .-> F5["Go on anyway"]
     end
     F4 --> G
-    F5 --> G["⚙ awaitStartupUpdate(StartupGateListener)<br/>startup gate: waits for the app updates of this boot<br/>onAppDownloading / onAppInstalling / onDownloadProgress"]
-    G -- "startup update over:<br/>Run at boot brings the app back to the front" --> R["⚙ onReady(reason)<br/>STARTUP_READY · STARTUP_TIMEOUT · STARTUP_NO_MDM"]
+    F5 --> G["⚙ awaitStartupUpdate(StartupGateListener)<br/>startup gate: waits for the app updates of this boot<br/>↩ onAppDownloading / onAppInstalling / onDownloadProgress"]
+    G -- "startup update over:<br/>Run at boot brings the app back to the front" --> R["↩ onReady(reason)<br/>STARTUP_READY · STARTUP_TIMEOUT · STARTUP_NO_MDM"]
     R --> K{"Launcher started<br/>by the app?"}
     K -- yes --> RC["⚙ disconnect() + connect()<br/>the data read at the first connection<br/>was from before the enrollment"]
-    RC --> RC2["⚙ onHeadwindMDMConnected()"]
+    RC --> RC2["↩ onHeadwindMDMConnected()"]
     RC2 --> H
     K -- no --> H(["Ready: operative<br/>⚙ getServerHost(), getDeviceId(), getMdmAgentError()"])
     H -.-> P1["Get device number<br/>⚙ disconnect() + connect()"]
-    H -.-> P2["Change device number<br/>⚙ getServerUrl(), getDeviceId()<br/>then the server's REST API<br/>⚙ onHeadwindMDMConfigChanged()"]
-    H -.-> P3["Sync configuration<br/>⚙ forceConfigUpdate()<br/>⚙ onHeadwindMDMConfigChanged()"]
+    H -.-> P2["Change device number<br/>⚙ getServerUrl(), getDeviceId()<br/>then the server's REST API<br/>↩ onHeadwindMDMConfigChanged()"]
+    H -.-> P3["Sync configuration<br/>⚙ forceConfigUpdate()<br/>↩ onHeadwindMDMConfigChanged()"]
     classDef user fill:#d6eaf8,stroke:#2471a3,stroke-width:2px,color:#000
     classDef mdm fill:#fdebd0,stroke:#d35400,stroke-width:2px,color:#000
     class A,E user
@@ -83,7 +83,7 @@ flowchart TD
 
 🟦 Blue blocks, marked 👆: the only steps which need the user.
 
-🟧 Orange blocks, marked ⚙: calls to the `HeadwindMDM` library (methods of `HeadwindMDM.getInstance()`) and its callbacks (`HeadwindMDM.EventHandler`, `HeadwindMDM.StartupGateListener`). Dashed arrows: the buttons of the ready screen.
+🟧 Orange blocks: the `HeadwindMDM` library. ⚙ marks a call from the app (a method of `HeadwindMDM.getInstance()`), ↩ a callback from the library to the app (`HeadwindMDM.EventHandler`, `HeadwindMDM.StartupGateListener`). Dashed arrows: the buttons of the ready screen.
 
 | Situation at start | What the app does |
 |---|---|
