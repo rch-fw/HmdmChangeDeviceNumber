@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Current step, or "Ready" -->
+    <TextView
+        android:id="@+id/stepTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/stepDetail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="4dp" />
+
+    <ProgressBar
+        android:id="@+id/stepProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:indeterminate="true" />
+
+    <!-- Operative: the app's normal work would be here -->
+    <LinearLayout
+        android:id="@+id/readyPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/deviceInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp" />
+
+        <Button
+            android:id="@+id/getButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Get device number" />
+
+        <Button
+            android:id="@+id/changeButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Change device number" />
+
+        <Button
+            android:id="@+id/syncButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sync configuration" />
+    </LinearLayout>
+
+    <!-- What the app did, also in logcat (tag SunmiSample) -->
+    <ScrollView
+        android:id="@+id/logScroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingTop="8dp">
+
+        <TextView
+            android:id="@+id/log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textSize="12sp" />
+    </ScrollView>
+
+</LinearLayout>

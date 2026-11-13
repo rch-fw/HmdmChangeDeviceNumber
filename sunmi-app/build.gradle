@@ -1,0 +1,61 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.rch.mdm.sunmi'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.mooney.mdm.sunmi'
+        minSdk 21
+        // No WiFi setup here (the network is already set up), so no need for targetSdk 28
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    // Same key as the MDM launcher when its properties are set in ~/.gradle/gradle.properties
+    // (RELEASE_M10_*), otherwise the debug key. The app needs no special signature.
+    def launcherKey = project.hasProperty('RELEASE_M10_STORE_FILE')
+    signingConfigs {
+        if (launcherKey) {
+            launcher {
+                storeFile file(RELEASE_M10_STORE_FILE)
+                keyAlias RELEASE_M10_KEY_ALIAS
+                storePassword RELEASE_M10_STORE_PASSWORD
+                keyPassword RELEASE_M10_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            if (launcherKey) signingConfig signingConfigs.launcher
+        }
+        release {
+            minifyEnabled false
+            if (launcherKey) signingConfig signingConfigs.launcher
+        }
+    }
+
+    // APK name: sunmi_sample_app-<versionName>-<buildType>.apk
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "sunmi_sample_app-${variant.versionName}-${variant.buildType.name}.apk"
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    // Device number and groups through the MDM server's REST API (Change device number)
+    implementation project(':mdmlib')
+    // Headwind MDM library, the same as the sample app's
+    implementation files('../app/libs/hmdm-1.2.2.aar')
+}

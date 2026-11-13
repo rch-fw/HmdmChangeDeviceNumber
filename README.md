@@ -126,6 +126,13 @@ running it waits for the startup update only. Then it is operative, with **Get d
 **Change device number**, **Sync configuration** and **Configure WiFi**. Targets SDK 28 (WiFi with
 `addNetwork`); needs launcher 6.54 or later. See [Ingenico Sample App](docs/ingenico-sample-app.md).
 
+# Sunmi Sample App
+
+`sunmi-app/` (`com.mooney.mdm.sunmi`) is the same concept for Sunmi terminals, where the launcher
+(`com.hmdm.launcher`) is device owner and HOME app, already enrolled, with the network already set
+up: the app only waits for the startup update, then it is operative with **Get device number**,
+**Change device number** and **Sync configuration**. See [Sunmi Sample App](docs/sunmi-sample-app.md).
+
 # Sample app
 
 Shows how to create a demo app that uses 2 libraries:
