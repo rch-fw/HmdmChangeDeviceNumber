@@ -11,8 +11,8 @@ android {
         minSdk 21
         // No WiFi setup here (the network is already set up), so no need for targetSdk 28
         targetSdk 34
-        versionCode 1
-        versionName '1.0'
+        versionCode 3
+        versionName '1.2'
     }
 
     compileOptions {
