@@ -49,7 +49,7 @@ From then on the launcher starts the app at every boot (*Run at boot*), and the 
 ```mermaid
 flowchart TD
     A["👆 Open the app"] --> S["Read the launcher's stopped state<br/>ApplicationInfo.FLAG_STOPPED<br/>before connecting"]
-    S --> B["⚙ HeadwindMDM.getInstance()<br/>.connect(context, handler)<br/>binds the launcher's plugin service"]
+    S --> B["⚙ HeadwindMDM.getInstance()<br/>.connect(context, handler)<br/>binds the launcher's plugin service:<br/>takes the launcher out of the stopped state<br/>but doesn't enroll it or run its startup update"]
     B -- "false, or no answer within 15 s" --> X(["Ready: MDM agent not available"])
     B --> CB["⚙ onHeadwindMDMConnected()"]
     CB --> C{"Agent running?<br/>⚙ getMdmAgentError() ≠ ERROR_NOT_CONFIGURED<br/>and not stopped"}
