@@ -63,8 +63,8 @@ flowchart TD
     subgraph F ["Start the launcher's main screen: startAgent()"]
         F1["▶ startActivity(launcher's start intent):<br/>getLaunchIntentForPackage(), or its HOME activity<br/>+ FLAG_ACTIVITY_NEW_TASK"]
         F1 --> F3["Launcher's MainActivity, in front:<br/>enrollment (init.json), configuration,<br/>startup update"]
-        F3 --> F4["↩ The app's MainActivity.onStop():<br/>the app stays behind the launcher<br/>and waits at the startup gate"]
-        F1 -. "launcher activity didn't start:<br/>onResume() without onStop()" .-> F5["Go on anyway"]
+        F3 --> F4["↩ The app's MainActivity.onStop()<br/>(the launcher's screen covers the app):<br/>calls ⚙ awaitStartupUpdate() through synchronize()<br/>the app stays behind the launcher and waits at the gate"]
+        F1 -. "launcher activity didn't start:<br/>onResume() without onStop()" .-> F5["↩ The app's MainActivity.onResume():<br/>calls ⚙ awaitStartupUpdate() through synchronize()<br/>anyway"]
     end
     F4 --> G
     F5 --> G["⚙ awaitStartupUpdate(StartupGateListener)<br/>startup gate: waits for the app updates of this boot<br/>↩ onAppDownloading / onAppInstalling / onDownloadProgress"]
@@ -82,7 +82,7 @@ flowchart TD
     classDef var fill:#e8daef,stroke:#7d3c98,stroke-width:2px,stroke-dasharray:5 3,color:#000
     class A,E user
     class VS var
-    class S,D,F1,F4 app
+    class S,D,F1,F4,F5 app
     class B,CB,C,G,R,RC,RC2,H,P1,P2,P3 mdm
 ```
 
