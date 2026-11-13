@@ -58,16 +58,15 @@ flowchart TD
     D -- no --> E["👆 Configure WiFi: choose the network,<br/>type the password, Connect<br/>addNetwork, wait for internet"]
     E --> F1
     D -- yes --> F1
-    subgraph F ["Start the launcher's main screen and come back to the front: startAgent()"]
-        F1["Launcher's start intent:<br/>getLaunchIntentForPackage(), or its HOME activity<br/>+ FLAG_ACTIVITY_NEW_TASK<br/>returnFromLauncher = true"]
-        F1 --> F2["LauncherStarterActivity, invisible:<br/>starts the launcher's MainActivity and finishes at once.<br/>Finishing an activity gives the app 10 s<br/>in which Android 10 lets it start an activity from the background"]
-        F2 --> F3["Launcher's MainActivity, in front:<br/>enrollment (init.json), configuration,<br/>startup update: they go on in the background"]
-        F3 --> F4["The app's MainActivity.onStop():<br/>startActivity(MainActivity, FLAG_ACTIVITY_REORDER_TO_FRONT)<br/>the app is back in front"]
-        F2 -. "launcher activity didn't start:<br/>onResume() without onStop()" .-> F5["Go on anyway"]
+    subgraph F ["Start the launcher's main screen: startAgent()"]
+        F1["startActivity(launcher's start intent):<br/>getLaunchIntentForPackage(), or its HOME activity<br/>+ FLAG_ACTIVITY_NEW_TASK"]
+        F1 --> F3["Launcher's MainActivity, in front:<br/>enrollment (init.json), configuration,<br/>startup update"]
+        F3 --> F4["The app's MainActivity.onStop():<br/>the app stays behind the launcher<br/>and waits at the startup gate"]
+        F1 -. "launcher activity didn't start:<br/>onResume() without onStop()" .-> F5["Go on anyway"]
     end
     F4 --> G
     F5 --> G["⚙ awaitStartupUpdate(StartupGateListener)<br/>startup gate: waits for the app updates of this boot<br/>onAppDownloading / onAppInstalling / onDownloadProgress"]
-    G --> R["⚙ onReady(reason)<br/>STARTUP_READY · STARTUP_TIMEOUT · STARTUP_NO_MDM"]
+    G -- "startup update over:<br/>Run at boot brings the app back to the front" --> R["⚙ onReady(reason)<br/>STARTUP_READY · STARTUP_TIMEOUT · STARTUP_NO_MDM"]
     R --> K{"Launcher started<br/>by the app?"}
     K -- yes --> RC["⚙ disconnect() + connect()<br/>the data read at the first connection<br/>was from before the enrollment"]
     RC --> RC2["⚙ onHeadwindMDMConnected()"]
@@ -117,7 +116,7 @@ flowchart TD
 
 ## How it works
 
-Code: [`MainActivity`](../ingenico-app/src/main/java/com/rch/mdm/ingenico/MainActivity.java) (states and screens), [`WifiSetup`](../ingenico-app/src/main/java/com/rch/mdm/ingenico/WifiSetup.java) (addNetwork), [`LauncherStarterActivity`](../ingenico-app/src/main/java/com/rch/mdm/ingenico/LauncherStarterActivity.java) (starts the launcher).
+Code: [`MainActivity`](../ingenico-app/src/main/java/com/rch/mdm/ingenico/MainActivity.java) (states and screens), [`WifiSetup`](../ingenico-app/src/main/java/com/rch/mdm/ingenico/WifiSetup.java) (addNetwork).
 
 States, in order: `CONNECTING` → (`WIFI`) → (`STARTING_AGENT`) → `SYNCHRONIZING` → `READY`.
 
@@ -151,13 +150,17 @@ Details and tests: [WiFi setup](wifi-setup.md#addnetwork-from-an-app-targeting-s
 
 ### 3. Starting the launcher
 
-The app starts the launcher's main activity (`getLaunchIntentForPackage()`, or its HOME activity), which enrolls it (`init.json`) and starts its configuration update, and then brings itself back to the front:
+The app starts the launcher's main activity (`getLaunchIntentForPackage()`, or its HOME activity) with `startActivity()`; the launcher enrolls (`init.json`) and runs its startup update.
 
-- the launcher is started from `LauncherStarterActivity`, an invisible activity which finishes at once;
-- in `onStop()` (the launcher's screen is up) the app restarts itself with `FLAG_ACTIVITY_REORDER_TO_FRONT`. Android 10 lets an app in the background start an activity only shortly after one of its activities finished: that's why the launcher is started from the short-lived activity;
-- the launcher's screen shows at most for a moment; its work goes on in the background.
+The app doesn't bring itself back to the front (since version 1.1):
 
-If the launcher's screen doesn't start (`onResume()` without `onStop()`), the app logs it and goes on to the startup gate. Details: [Starting the MDM launcher](start-launcher.md).
+- in `onStop()` (the launcher's screen is up) it calls the startup gate and waits behind the launcher;
+- when the startup update is over, the launcher starts the apps marked **Run at boot**: the app (`singleTask`) comes back to the front with its state, and the gate is open or opens at once;
+- so the app must be **Run at boot** in the configuration the launcher enrolls into (see [Deployment](#deployment)); otherwise the launcher's screen stays in front and the user opens the app again from the home screen (it finds itself ready).
+
+If the launcher's screen doesn't start (`onResume()` without `onStop()`), the app logs it and goes on to the startup gate.
+
+The sample app instead comes back to the front by itself, because its configuration may not have it *Run at boot*: [Starting the MDM launcher](start-launcher.md).
 
 ### 4. Startup gate
 
@@ -176,15 +179,15 @@ If the app started the agent, it reconnects to read the data of the enrolled lau
 
 ## Doing the same in your app
 
-1. **Manifest:** `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`, `ACCESS_FINE_LOCATION` (network list; the Ingenico firmware grants it at install); `<queries>` for `com.hmdm.launcher` and `com.hmdm.launcher.ingenico`; the launch activity `singleTask` (the launcher's *Run at boot* then brings back the existing screen); `LauncherStarterActivity` translucent, `noHistory`, `excludeFromRecents`.
+1. **Manifest:** `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`, `ACCESS_FINE_LOCATION` (network list; the Ingenico firmware grants it at install); `<queries>` for `com.hmdm.launcher` and `com.hmdm.launcher.ingenico`; the launch activity `singleTask` (the launcher's *Run at boot* then brings back the existing screen, with its state).
 2. **Gradle:** `targetSdk 28`, and in `lint` disable `ExpiredTargetSdkVersion` and `OldTargetApi`; the hmdm library 1.2.2 or later.
 3. **At start:** read the stopped state, connect, decide in `onHeadwindMDMConnected()` (section [1](#1-is-the-agent-running)).
-4. **Not running:** WiFi if there is no validated network ([2](#2-wifi)), start the launcher and come back ([3](#3-starting-the-launcher)), then the startup gate.
+4. **Not running:** WiFi if there is no validated network ([2](#2-wifi)), start the launcher ([3](#3-starting-the-launcher)), then the startup gate; the app *Run at boot* in the configuration, so the launcher brings it back.
 5. **Running:** the startup gate only ([4](#4-startup-gate)).
 6. **Don't** request a configuration sync before the launcher is enrolled (it fails: no device ID yet) or during the startup update (it would start a second update in parallel).
 7. **Never log** the WiFi or MDM passwords.
 
-`MainActivity` holds all of it; copy `WifiSetup` and `LauncherStarterActivity` as they are.
+`MainActivity` holds all of it; copy `WifiSetup` as it is.
 
 ## Testing
 
@@ -197,7 +200,7 @@ adb uninstall com.hmdm.launcher.ingenico
 adb uninstall com.hmdm.pager               # and the other apps the configuration installs
 # Forget any other saved network for the test WiFi in the settings, then:
 adb install hmdm-launcher-ingenico-release-6.54.apk
-adb install ingenico_sample_app-1.0-debug.apk
+adb install ingenico_sample_app-1.1-debug.apk
 adb shell dumpsys package com.hmdm.launcher.ingenico | grep stopped   # stopped=true
 adb logcat -c
 ```
@@ -208,7 +211,7 @@ Open the app on the terminal, choose the network, **Connect**, and follow:
 adb logcat -v time | grep -E "IngenicoSample|Startup update|Run at boot|Configuration updated|installed successfully"
 ```
 
-Run on the EX6000 (development terminal), launcher 6.54, no saved network in range:
+Run on the EX6000 (development terminal), launcher 6.54, app 1.0 (which still brought itself back to the front after starting the launcher), no saved network in range:
 
 | Time | Event |
 |---|---|
@@ -245,6 +248,7 @@ Expected (tested): `MDM agent running`, `Startup gate: open, startup update over
 | Ready, but the apps weren't installed | Launcher older than 6.54 (the startup update ended before the enrollment), or no network when the launcher loaded its configuration: reboot, the next startup update installs them. |
 | "MDM agent not enrolled" on the ready screen | The launcher couldn't enroll (no network, enrollment settings missing in its APK): check the launcher's log (`HeadwindMDM`). |
 | Another app opens on top when the startup update ends | That app is marked *Run at boot* in the configuration. |
+| After the WiFi setup the launcher's screen stays in front, the app doesn't come back | The app isn't marked *Run at boot* in the configuration (or the launcher lacks "draw over other apps", see [Startup sync](startup-sync.md#starting-apps-at-boot)). Open the app from the home screen: it is ready. |
 | **Change device number** fails with HTTP 401/403 | Wrong credentials, or the MDM user lacks the `rename_device` permission. |
 | **Sync configuration**: "no answer from the agent within 90 s" | The update failed (network or server error): the launcher reports only successful updates. |
 

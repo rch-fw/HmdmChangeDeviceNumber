@@ -3,6 +3,7 @@ package com.rch.mdm.ingenico;
 import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
@@ -60,7 +61,8 @@ import java.util.Map;
  * - Agent not running: not enrolled yet (new device), or in the stopped state (never run, or
  *   force-stopped, so it missed the boot). The app initializes the device: if there is no network
  *   it configures WiFi (addNetwork, the app targets SDK 28), then starts the launcher's main screen,
- *   which enrolls it and runs its startup update, and comes back to the front.
+ *   which enrolls it and runs its startup update. The app stays behind it: when the startup update
+ *   is over, the launcher brings it back to the front (Run at boot in the configuration).
  * - Agent running: nothing to start.
  *
  * In both cases it then synchronizes with the agent through the startup gate
@@ -97,8 +99,8 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     private boolean launcherStopped;
     /** The app started the launcher: read the device data again once operative. */
     private boolean agentInitialized;
-    /** Set while the launcher's activity is being started: come back to the front in onStop(). */
-    private boolean returnFromLauncher;
+    /** Set while the launcher's activity is being started: synchronize in onStop(). */
+    private boolean launcherStarting;
     private boolean syncing;
     /** Device number or groups changed on the server: read the device data again at the next configuration update. */
     private boolean changePending;
@@ -220,9 +222,9 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     @Override
     protected void onResume() {
         super.onResume();
-        if (returnFromLauncher) {
+        if (launcherStarting) {
             // Back here without onStop(): the launcher's activity didn't start
-            returnFromLauncher = false;
+            launcherStarting = false;
             log("The MDM agent's screen didn't start");
             synchronize();
         }
@@ -231,13 +233,13 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
     @Override
     protected void onStop() {
         super.onStop();
-        if (returnFromLauncher) {
+        if (launcherStarting) {
             // onStop() comes after the launcher activity's onResume(), where it has started its
-            // enrollment and configuration update, which go on in the background. Come back to the
-            // front: allowed from the background because LauncherStarterActivity has just finished.
-            returnFromLauncher = false;
-            startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
-            log("MDM agent started, back to the front");
+            // enrollment and configuration update. The app stays behind the launcher and waits at
+            // the startup gate: when the startup update is over, the launcher starts the apps marked
+            // Run at boot, and this one (singleTask) comes back to the front with its state.
+            launcherStarting = false;
+            log("MDM agent started, waiting behind it");
             synchronize();
         }
     }
@@ -321,10 +323,15 @@ public class MainActivity extends AppCompatActivity implements HeadwindMDM.Event
         }
         setStep(State.STARTING_AGENT, "Starting the MDM agent", "It enrolls and loads its configuration");
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        returnFromLauncher = true;
-        startActivity(new Intent(this, LauncherStarterActivity.class)
-                .putExtra(LauncherStarterActivity.EXTRA_LAUNCHER_INTENT, intent));
-        log("Starting " + intent.getComponent().flattenToShortString());
+        launcherStarting = true;
+        try {
+            startActivity(intent);
+            log("Starting " + intent.getComponent().flattenToShortString());
+        } catch (ActivityNotFoundException | SecurityException e) {
+            launcherStarting = false;
+            log("FAILED to start the MDM agent: " + e);
+            synchronize();
+        }
     }
 
     /**
