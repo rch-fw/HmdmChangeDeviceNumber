@@ -48,9 +48,9 @@ From then on the launcher starts the app at every boot (*Run at boot*), and the 
 
 ```mermaid
 flowchart TD
-    A["👆 Open the app"] --> B["⚙ HeadwindMDM.getInstance()<br/>.connect(context, handler)<br/>binds the launcher's plugin service:<br/>takes the launcher out of the stopped state<br/>but doesn't enroll it or run its startup update"]
+    A["👆 Open the app"] --> S["Read the launcher's stopped state from the package manager:<br/>getPackageManager().getApplicationInfo(launcher, 0).flags<br/>#amp; ApplicationInfo.FLAG_STOPPED<br/>now, because connect() clears it"]
+    S --> B["⚙ HeadwindMDM.getInstance()<br/>.connect(context, handler)<br/>binds the launcher's plugin service:<br/>takes the launcher out of the stopped state<br/>but doesn't enroll it or run its startup update"]
     B -- "false, or no answer within 15 s" --> X(["Ready: MDM agent not available"])
-    S["📝 Just before: the app reads the launcher's stopped state<br/>(ApplicationInfo.FLAG_STOPPED), which connect() clears"] -.- B
     B --> CB["↩ onHeadwindMDMConnected()"]
     CB --> C{"Agent running?<br/>⚙ getMdmAgentError() ≠ ERROR_NOT_CONFIGURED<br/>and not stopped"}
     C -- yes --> G
@@ -77,15 +77,13 @@ flowchart TD
     H -.-> P3["Sync configuration<br/>⚙ forceConfigUpdate()<br/>↩ onHeadwindMDMConfigChanged()"]
     classDef user fill:#d6eaf8,stroke:#2471a3,stroke-width:2px,color:#000
     classDef mdm fill:#fdebd0,stroke:#d35400,stroke-width:2px,color:#000
-    classDef note fill:none,stroke:#888,stroke-dasharray:4 3,color:#555
     class A,E user
-    class S note
     class B,CB,C,G,R,RC,RC2,H,P1,P2,P3 mdm
 ```
 
 🟦 Blue blocks, marked 👆: the only steps which need the user.
 
-🟧 Orange blocks: the `HeadwindMDM` library. ⚙ marks a call from the app (a method of `HeadwindMDM.getInstance()`), ↩ a callback from the library to the app (`HeadwindMDM.EventHandler`, `HeadwindMDM.StartupGateListener`). Dashed arrows: the buttons of the ready screen. 📝 Dashed blocks: notes on the block they are linked to.
+🟧 Orange blocks: the `HeadwindMDM` library. ⚙ marks a call from the app (a method of `HeadwindMDM.getInstance()`), ↩ a callback from the library to the app (`HeadwindMDM.EventHandler`, `HeadwindMDM.StartupGateListener`). Dashed arrows: the buttons of the ready screen.
 
 | Situation at start | What the app does |
 |---|---|
