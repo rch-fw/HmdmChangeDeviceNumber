@@ -243,6 +243,26 @@ Expected (tested): `MDM agent running`, `Startup gate: open, startup update over
 
 `adb shell am force-stop com.hmdm.launcher.ingenico`, then open the app: `MDM agent not running (stopped)`, the launcher is started, then the startup gate.
 
+## FAQ
+
+### We call `awaitStartupUpdate()` ourselves, when the app can be closed. Can't that call start the update? The launcher has to wait for us anyway.
+
+No, the launcher doesn't wait for the app. `awaitStartupUpdate()` doesn't start anything: it only asks the launcher whether its startup update is over, and holds the app until it is.
+
+- **At boot** the launcher starts the startup update by itself, as soon as it has the network: the app may not be running yet (the launcher starts it with *Run at boot* only at the end), and the other apps of the configuration are updated too. The app can't be in a payment during it, because it waits at the gate; so the launcher doesn't need the app's permission.
+- **During the day** the app chooses the moment with **`forceConfigUpdate()`** (the **Sync configuration** button): with launcher **6.55** or later it loads the configuration and installs and removes the apps right away, even with *Install app updates only at device startup* checked. Call it when the app can be closed, after the gate opened. See [Startup sync](startup-sync.md#sync-requested-by-an-app).
+
+So the two calls split the work: `awaitStartupUpdate()` waits for the update of the boot, `forceConfigUpdate()` asks for one now.
+
+### Once the launcher has downloaded everything, does it close the app and update by itself, or do we still have to reboot?
+
+No reboot, as long as the update runs at boot or from the app's sync:
+
+- **The startup update** (at boot) and **a sync requested by the app** (`forceConfigUpdate()`, launcher 6.55 or later) install the apps right away.
+- **If the configuration has a new version of the app**, Android closes the app while installing it (the app doesn't have to do anything); the launcher then starts the new version (*Run at boot*, or *Run after install*), which calls `awaitStartupUpdate()` again and gets "over" at once. If the app isn't marked either way, the user opens it again.
+- **If the configuration has a new version of the MDM launcher**, it installs it and restarts by itself (`Launcher updated to …, restarting it`). The app's startup gate survives the restart: the hmdm library asks again when it reconnects.
+- **Only the other updates during the day** (server push, the periodic check) leave app installs and removals for the next boot, with *Install app updates only at device startup* checked (the default). Then reboot (`sendPush("reboot", null)`, the web panel, or by hand), or call `forceConfigUpdate()` from the app.
+
 ## Troubleshooting
 
 | Symptom | Cause, what to do |
