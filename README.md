@@ -135,7 +135,7 @@ up: the app only waits for the startup update, then it is operative with **Get d
 
 For a kiosk app that opens the WiFi settings in kiosk mode (which intent, what the configuration
 must allow, the launcher restarting the kiosk app at every configuration push up to 6.56 and the
-fix in 6.57/6.58) see [WiFi settings from a kiosk app on Sunmi terminals](docs/kiosk-wifi-settings.md).
+fix in 6.57–6.60) see [WiFi settings from a kiosk app on Sunmi terminals](docs/kiosk-wifi-settings.md).
 
 # Sample app
 

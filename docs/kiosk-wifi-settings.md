@@ -1,8 +1,8 @@
 # WiFi settings from a kiosk app on Sunmi terminals
 
-How a kiosk app lets the user choose a WiFi network on a Sunmi terminal in kiosk mode: which intent to use, what the MDM configuration must allow, and what the MDM launcher does to the screen the user is on. It ends with the [requirements](#requirements) for the configuration and for the kiosk app, and the [launcher fix in 6.57/6.58](#launcher-fix-657658) for the repeated starts of the kiosk app.
+How a kiosk app lets the user choose a WiFi network on a Sunmi terminal in kiosk mode: which intent to use, what the MDM configuration must allow, and what the MDM launcher does to the screen the user is on. It ends with the [requirements](#requirements) for the configuration and for the kiosk app, and the [launcher fix in 6.57–6.60](#launcher-fix-657660) for the repeated starts of the kiosk app.
 
-Everything below was measured on a Sunmi terminal (Android 14, 1920×1200 landscape) with `it.mooney.srvmooney` 1.0.6 as kiosk app, on 2026-11-13, unless marked *not tested*: the problem with launcher 6.56, the fix with launchers 6.57 and 6.58 (branch `dev/kiosk-no-restart` of the launcher repository, not merged yet).
+Everything below was measured on a Sunmi terminal (Android 14, 1920×1200 landscape) with `it.mooney.srvmooney` 1.0.6 as kiosk app, on 2026-11-13 and 2026-11-16, unless marked *not tested*: the problem with launcher 6.56, the fix with launchers 6.57 to 6.60 (branch `dev/kiosk-no-restart` of the launcher repository, not merged yet).
 
 ## Context
 
@@ -89,14 +89,14 @@ This was started from adb, not from the kiosk app. The lock task check depends o
 
 ## Repeated starts of the kiosk app
 
-Up to launcher 6.56, the launcher starts the kiosk app with `startActivity()` every time it shows its content (`MainActivity.showContent()` → `ProUtils.startCosuKioskMode()`), even when kiosk mode is already running and the kiosk app is already on screen. Launcher 6.57 stops doing that while the kiosk app is in front (see [Launcher fix](#launcher-fix-657658)).
+Up to launcher 6.56, the launcher starts the kiosk app with `startActivity()` every time it shows its content (`MainActivity.showContent()` → `ProUtils.startCosuKioskMode()`), even when kiosk mode is already running and the kiosk app is already on screen. Launcher 6.57 stops doing that while the kiosk app is in front, and 6.59/6.60 remove the extra starts at boot (see [Launcher fix](#launcher-fix-657660)).
 
 | Trigger | Starts the kiosk app, ≤ 6.56 | Starts the kiosk app, 6.57+ |
 |---|---|---|
-| Boot | 2 times (sometimes 3): when the launcher starts, and at the end of its configuration update. The second start can come **while the user is already using the app** (one boot: a touch, then the start 3 s later). | 1 time. 2–3 times when the launcher is recreated at boot (see [Residual starts at boot](#residual-starts-at-boot)), all within the first 2–4 seconds. The start at the end of the configuration update is skipped in every boot. |
+| Boot | 2 times (sometimes 3): when the launcher starts, and at the end of its configuration update. The second start can come **while the user is already using the app** (one boot: a touch, then the start 3 s later). | 6.57/6.58: 1 time, 2–3 times when the launcher is recreated at boot or `startLockTask()` fails, all within the first 2–4 seconds. **6.60: 1 time** in every boot (see [Starts at boot](#starts-at-boot-659660)). From 6.57 the start at the end of the configuration update is skipped in every boot. |
 | Configuration push from the server (`configUpdated`) | Once, even with nothing changed and nothing to install | No |
 | Launcher's own updates: MQTT ping check, periodic workers, an app's sync request (`forceConfigUpdate()`) | No | No |
-| Launcher's `MainActivity` recreated by a configuration change (orientation, locale, SIM, font scale) | Yes | Yes, if the launcher is in front at that moment |
+| Launcher's `MainActivity` recreated by a configuration change | Yes | Yes, if the launcher is in front at that moment. From 6.59 screen size, layout and orientation changes no longer recreate it in kiosk mode; locale, SIM and font scale still do. |
 | Kiosk app task gone: crash, force-stop, update, the app closes itself | Yes (needed) | Yes (needed) |
 | Launcher updated (Android stops it to replace it, and lock task mode ends with it) | Yes: the kiosk app restarts from scratch | Same: unavoidable |
 
@@ -122,7 +122,7 @@ What a start does to the kiosk app:
 | Android user restrictions in the configuration's `restrictions` field (comma-separated; the launcher applies them as device owner), for example `no_factory_reset`, `no_debugging_features`, `no_install_unknown_sources`, `no_config_tethering`, `no_add_user` | Allowing Settings allows all of it: **Mostra tutte** and the gears lead there. The restrictions limit what the user can do once there. The exact list is still to be decided. |
 | Trim the system apps in the configuration | Each one that isn't marked *remove* is allowed in kiosk mode |
 | `kiosk_restart_delay_ms` = 0 | Up to 6.56 delayed starts pile up and are never cancelled. From 6.57 they are harmless, but the delay also slows the starts that are needed. |
-| Launcher 6.58 or later | No restart of the kiosk app at pushes, allowlist refreshed at pushes, kiosk app changes applied without a reboot |
+| Launcher 6.60 or later | No restart of the kiosk app at pushes, allowlist refreshed at pushes, kiosk app changes applied without a reboot, a single start of the kiosk app at boot |
 
 ### Kiosk app
 
@@ -131,7 +131,8 @@ What a start does to the kiosk app:
 | Open WiFi with `Settings.Panel.ACTION_INTERNET_CONNECTIVITY`, not `ACTION_WIFI_SETTINGS` | The user stays in the app. No Settings homepage, and nothing is lost on a push or at boot. |
 | Before starting it, check `DevicePolicyManager.isLockTaskPermitted("com.android.settings")` while in lock task mode, and show a message if it isn't permitted | A blocked start is silent: without the check the app waits forever |
 | Detect the connection with a `ConnectivityManager` network callback, not by polling | No endless loop when the user closes the dialog without changing anything |
-| Tolerate `onPause`, `onNewIntent` and `onResume` at any time, not only after a user action | Up to 6.56 the launcher triggers them at every push and at boot. From 6.57 only at boot (first seconds) and when the launcher is recreated, but older launchers are still in the field. |
+| Tolerate `onPause`, `onNewIntent` and `onResume` at any time, not only after a user action | Up to 6.56 the launcher triggers them at every push and at boot. 6.57/6.58 only at boot (first seconds) and when the launcher is recreated. 6.60 no longer does at boot, but older launchers are still in the field. |
+| Handle the boot configuration change: declare `configChanges="orientation|screenSize|smallestScreenSize|screenLayout"` on the activities, or tolerate being recreated | About 2 s after boot the system sends a screen size and layout change. If the kiosk app is already in front, Android recreates it (the Sunmi Sample App was recreated in 2 boots out of 10 with launcher 6.60). The launcher can't prevent that. |
 | Don't use `singleTask` or `singleInstance` for the root activity if the app opens other activities of its own | A repeated start would destroy them |
 | Use the startup gate (`awaitStartupUpdate()`, see [Startup sync](startup-sync.md)) | Without it the app is usable while the launcher is still updating apps, and an update of the app kills it. `srvmooney` was usable for about 12 s before the startup update ended. |
 
@@ -154,7 +155,7 @@ boolean openWifiPicker(Activity activity) {
 
 `isLockTaskPermitted()` can be called by any app.
 
-## Launcher fix (6.57/6.58)
+## Launcher fix (6.57–6.60)
 
 The kiosk app can't protect another app's screen from the launcher's repeated starts: an external activity (a payment app, for example) has no dialog alternative. So the fix is in the launcher, in `MainActivity.startCosuKioskModeChecked()`, the method every kiosk start goes through (boot, push, install, recreation, delayed start). It only touches `MainActivity`, not the `ProUtils` flavors.
 
@@ -169,29 +170,47 @@ The launcher being in the background means that the kiosk app, or an app it open
 
 **6.58.** When the kiosk app changes in the configuration while lock task mode is running, the old kiosk app's task would stay in lock task mode if the old app is still in the configuration. It would come back in front when the new one is moved to the back, and the launcher wouldn't start the new one any more. So before starting the new kiosk app, the launcher removes the old package from the allowlist for a moment, and Android finishes its locked tasks (`clear-task-all`). The log shows `Kiosk app changed: closed the tasks of the previous kiosk app <package>`. Then the configuration's allowlist is set again.
 
+**6.59.** About 2 s after the launcher starts at boot, the system sends a configuration change (screen size and layout, `536872192`) that doesn't come from the launcher. If it arrived while the launcher was in front, before the first start of the kiosk app, Android recreated the launcher's `MainActivity`, which had no `configChanges`: the new instance started the kiosk app again, `startLockTask()` from the activity being recreated failed (`Invalid task, not in foreground`), and the destroyed instance's kiosk retry, still posted on the handler, ran in parallel with the new instance's retries. 6.59:
+
+1. declares `configChanges="orientation|screenSize|smallestScreenSize|screenLayout"` on `MainActivity`. In `onConfigurationChanged()` the launcher recreates itself, as Android did before, unless kiosk mode runs with an external kiosk app: then it shows no app grid and has nothing to redo. The desktop still recomputes its grid for the new width;
+2. removes the pending kiosk check in `onDestroy()`, so only the live instance checks and retries.
+
+**6.60.** `ProUtils.startCosuKioskMode()` calls `startLockTask()` and right after it `startActivity()` of the kiosk app. On Android 14 `startLockTask()` is a one-way call: the system could start the kiosk app and move its task in front first, then fail the lock task request (`Invalid task, not in foreground`), and the kiosk check retried 1 s later with a second start (3 boots out of 10 on 6.59). At the first start (lock task mode not running, launcher device owner and in front), 6.60 refreshes the allowlist and the options, calls `startLockTask()` from the launcher, checks every 50 ms until lock task mode is locked (at most 2 s), and only then starts the kiosk app. The log shows `Lock task mode started in N ms, starting <package>`. If it isn't locked within 2 s, or `startLockTask()` throws (before Android 12), the previous path runs, with its check and retries.
+
 ### Tests
 
 On the Sunmi terminal, kiosk app `it.mooney.srvmooney` 1.0.6 or the Sunmi Sample App:
 
 | # | Test | Result |
 |---|---|---|
-| 1 | Reboot loop, 10 rounds (6.57) | 10/10 PASS. The start at the end of the configuration update is skipped in every round. 1 start in 3 rounds, 2–3 starts in the 7 rounds with the launcher recreated at boot. |
-| 2 | Push with the kiosk app in front | No start, no lifecycle callback in the kiosk app |
+| 1 | Reboot loop, 10 rounds | 6.57: 10/10 PASS, 1 start in 3 rounds. 6.59: 10/10 PASS, 1 start in 7 rounds. **6.60: 10/10 PASS with the Sample App and 10/10 PASS with `srvmooney`, 1 start in all 20 rounds.** See [Starts at boot](#starts-at-boot-659660). |
+| 2 | Push with the kiosk app in front (6.57, 6.60) | No start, no lifecycle callback in the kiosk app |
 | 3 | Push with the full WiFi Settings page open | The page stays on screen |
-| 4 | Kiosk app crash (`am crash`) / force-stop | The launcher starts it again after 0.33 s / 0.2 s |
-| 5 | Kiosk app changed by push, both directions (6.58) | The new kiosk app starts without a reboot. The old one's task is closed: only the launcher and the new kiosk app are left in lock task mode. |
+| 4 | Kiosk app crash (`am crash`) / force-stop (6.57, 6.60) | The launcher starts it again after 0.15–0.33 s |
+| 5 | Kiosk app changed by push, both directions (6.58, 6.60) | The new kiosk app starts without a reboot. The old one's task is closed: only the launcher and the new kiosk app are left in lock task mode. |
 | 6 | `com.android.settings` added by push, no reboot | In the allowlist right after the push |
 | 7 | Kiosk app updated by the launcher at boot (Sample App 1.0 → 1.2) | The install kills the app, which was waiting at the startup gate. The launcher starts the new version, which opens the gate and becomes operative. Android stops the package twice during the replace, so the first restart is lost and the second one works. |
 | 8 | `kiosk_restart_delay_ms` = 10000 and a push | The delayed start fires 10 s later and is skipped |
 
-### Residual starts at boot
+Tests 3, 6, 7 and 8 ran on 6.57/6.58. 6.59 and 6.60 only change the first start at boot and the launcher's recreation, which those tests don't depend on.
 
-About 2 s after the launcher starts, the system sends a configuration change (screen size and layout) that doesn't come from the launcher. If it arrives before the first start of the kiosk app, while the launcher is still in front, Android recreates the launcher's `MainActivity`:
+### Starts at boot (6.59/6.60)
 
-- The recreated activity starts the kiosk app again, 1–2 s after the first start, while the kiosk app is still loading.
-- `startLockTask()` called during the recreation can fail (`IllegalArgumentException: Invalid task, not in foreground`). The kiosk retry then brings the launcher to front and starts the kiosk app again (`Kiosk mode not started (lock task not started), bringing launcher to front, attempt n/5`). With a kiosk app that comes to front quickly, the retry can fail again a few times, because on Android 14 `startLockTask()` is applied after the kiosk app's task has already moved in front. The attempt counter belongs to the activity instance, so after a recreation two instances can retry in parallel.
+Reboot loops of 10 rounds on the Sunmi terminal; each round reboots and captures the log until the startup update ends:
 
-The end state is always correct (kiosk app in front, lock task LOCKED). The fix would be for the launcher's `MainActivity` to handle `screenSize|screenLayout` itself (`configChanges`), so it isn't recreated. That's still to be proposed and tested.
+| | 6.57 (`srvmooney`) | 6.59 (Sample App) | 6.60 (Sample App) | 6.60 (`srvmooney`) |
+|---|---|---|---|---|
+| PASS | 10/10 | 10/10 | 10/10 | 10/10 |
+| Rounds with exactly 1 start | 3 | 7 | **10** | **10** |
+| Start at the end of the configuration update | skipped | skipped | skipped | skipped |
+| Launcher recreated at boot | 7 | 0 | 0 | 0 |
+| `Invalid task` + kiosk retry | 3 | 3 | 0 | 0 |
+| Wait for lock task mode | — | — | 446–992 ms (avg 764) | 497–870 ms (avg 694) |
+| First start of the kiosk app after the launcher | ~2 s | +1.7–3.3 s | +1.9–3.3 s (avg 2.7) | +1.9–2.6 s |
+
+With 6.60 the kiosk app appears about 0.6 s later than with 6.59 (the time lock task mode takes), while the launcher's start screen stays visible. The 2 s fallback never triggered.
+
+The same boot configuration change still reaches the kiosk app when it is already in front: the Sample App, which doesn't declare `configChanges`, was recreated in 2 rounds out of 10 with 6.60. That's for the kiosk app to handle (see [Kiosk app](#kiosk-app)).
 
 ### Notes for testing
 
@@ -204,5 +223,4 @@ The end state is always correct (kiosk app in front, lock task LOCKED). The fix 
 - What **Mostra tutte** and the network gears open in kiosk mode, and which restrictions are enough to make it safe.
 - Confirm from a kiosk app build that uses `ACTION_INTERNET_CONNECTIVITY`: dialog shown with Settings allowed, blocked without it.
 - `Settings.Panel.ACTION_WIFI` on a push with launcher ≤ 6.56: covered or not.
-- The launcher not being recreated at boot (`configChanges`), see [Residual starts at boot](#residual-starts-at-boot).
-- Merging the branch `dev/kiosk-no-restart` (6.58) into the launcher's `master`.
+- Merging the branch `dev/kiosk-no-restart` (6.60) into the launcher's `master`.
