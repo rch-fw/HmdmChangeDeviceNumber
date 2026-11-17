@@ -96,7 +96,7 @@ Up to launcher 6.56, the launcher starts the kiosk app with `startActivity()` ev
 | Boot | 2 times (sometimes 3): when the launcher starts, and at the end of its configuration update. The second start can come **while the user is already using the app** (one boot: a touch, then the start 3 s later). | 6.57/6.58: 1 time, 2–3 times when the launcher is recreated at boot or `startLockTask()` fails, all within the first 2–4 seconds. **6.60: 1 time** in every boot (see [Starts at boot](#starts-at-boot-659660)). From 6.57 the start at the end of the configuration update is skipped in every boot. |
 | Configuration push from the server (`configUpdated`) | Once, even with nothing changed and nothing to install | No |
 | Launcher's own updates: MQTT ping check, periodic workers, an app's sync request (`forceConfigUpdate()`) | No | No |
-| Launcher's `MainActivity` recreated by a configuration change | Yes | Yes, if the launcher is in front at that moment. From 6.59 screen size, layout and orientation changes no longer recreate it in kiosk mode; locale, SIM and font scale still do. |
+| Launcher's `MainActivity` recreated by a configuration change | Yes | Yes, if the launcher is in front at that moment. From 6.59 screen size, layout and orientation changes (including a display rotation) no longer recreate it in kiosk mode; locale, SIM and font scale still do. See [Display rotation](#display-rotation-660). |
 | Kiosk app task gone: crash, force-stop, update, the app closes itself | Yes (needed) | Yes (needed) |
 | Launcher updated (Android stops it to replace it, and lock task mode ends with it) | Yes: the kiosk app restarts from scratch | Same: unavoidable |
 
@@ -191,6 +191,7 @@ On the Sunmi terminal, kiosk app `it.mooney.srvmooney` 1.0.6 or the Sunmi Sample
 | 6 | `com.android.settings` added by push, no reboot | In the allowlist right after the push |
 | 7 | Kiosk app updated by the launcher at boot (Sample App 1.0 → 1.2) | The install kills the app, which was waiting at the startup gate. The launcher starts the new version, which opens the gate and becomes operative. Android stops the package twice during the replace, so the first restart is lost and the second one works. |
 | 8 | `kiosk_restart_delay_ms` = 10000 and a push | The delayed start fires 10 s later and is skipped |
+| 9 | Display rotation, kiosk mode and desktop mode (6.60) | Kiosk mode: no recreation of the launcher, no start of the kiosk app. Desktop mode: the launcher is recreated and redraws its app grid. See [Display rotation](#display-rotation-660). |
 
 Tests 3, 6, 7 and 8 ran on 6.57/6.58. 6.59 and 6.60 only change the first start at boot and the launcher's recreation, which those tests don't depend on.
 
@@ -211,6 +212,27 @@ Reboot loops of 10 rounds on the Sunmi terminal; each round reboots and captures
 With 6.60 the kiosk app appears about 0.6 s later than with 6.59 (the time lock task mode takes), while the launcher's start screen stays visible. The 2 s fallback never triggered.
 
 The same boot configuration change still reaches the kiosk app when it is already in front: the Sample App, which doesn't declare `configChanges`, was recreated in 2 rounds out of 10 with 6.60. That's for the kiosk app to handle (see [Kiosk app](#kiosk-app)).
+
+### Display rotation (6.60)
+
+How the launcher handles orientation:
+
+- **The configuration's orientation setting** (portrait, landscape or unset) is applied at the end of every configuration update to the launcher's own activity (`Utils.setOrientation()`, log `Set orientation: …`). It doesn't affect the kiosk app, which covers the launcher in kiosk mode.
+- **During a configuration update** the launcher locks its current orientation (`lockOrientation()`, log `Lock orientation: orientation=…, rotation=…`) and releases it at the end. This comes from upstream: before 6.59 a rotation recreated the launcher, which interrupted the update. `DISABLE_ORIENTATION_LOCK` in the build turns it off.
+- **A rotation** reaches the launcher's `onConfigurationChanged()` (6.59+): in kiosk mode with an external kiosk app it does nothing; in desktop mode it recreates the activity, so the app grid is recomputed for the new width.
+- **The kiosk app** rotates according to its own manifest or `setRequestedOrientation()` and the system auto-rotate setting. Without `configChanges` for `orientation|screenSize|smallestScreenSize|screenLayout`, Android recreates it at every rotation. `srvmooney` declares them.
+
+Tests on the Sunmi terminal with launcher 6.60:
+
+| Test | How | Result |
+|---|---|---|
+| Kiosk mode, `srvmooney` in front | Auto-rotate off, rotation forced with `adb shell settings put system user_rotation 0/1`: landscape → portrait → landscape | `srvmooney`: `onConfigurationChanged`, no recreation. Launcher: no event (it's stopped in the background; Android applies the change when it becomes visible again). No start of the kiosk app. |
+| Kiosk mode, launcher back in front in a new orientation | Rotation to portrait, then `am force-stop` of `srvmooney` | Launcher: `onRestart` → `onResume`, **no recreation**, a single start of `srvmooney`. Up to 6.58 this was the moment the launcher got recreated and started the kiosk app twice. |
+| Desktop mode (kiosk off in the configuration) | Rotation forced with adb: landscape → portrait → landscape | The launcher is recreated at each rotation (`recreate()`) and redraws the grid: 160 px apart in landscape (1920 px), 150 px in portrait (1200 px). No crash. |
+| Kiosk mode turned back on by push | Configuration push | `Lock task mode started in 52 ms, starting it.mooney.srvmooney`, a single start |
+| **Physical rotation**, kiosk mode, `srvmooney` in front | Auto-rotate on, terminal rotated by hand: portrait, landscape, upside down, back | 6 rotations (`ROTATION_0`, `90`, `270`), same configuration change as the adb test (`Config changes=20000580`). `srvmooney` handled all 6 with `onConfigurationChanged`. Launcher: no start, no recreation; the system only redraws its overlay windows (type 2038). |
+
+The physical rotation and the adb test have the same effect on the launcher and the kiosk app. On this terminal Sunmi doesn't block auto-rotate; turning the terminal upside down goes from landscape through portrait to reverse landscape (`ROTATION_270`), and reverse portrait (`ROTATION_180`) doesn't occur.
 
 ### Notes for testing
 
