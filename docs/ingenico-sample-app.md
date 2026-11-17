@@ -188,13 +188,63 @@ Details: [Startup sync](startup-sync.md).
 
 The app reconnects (`disconnect()` + `connect()`) and shows the server and the device number when `onHeadwindMDMConnected()` arrives. The reconnection is needed when the app started the launcher (the data read at the first connection was from before the enrollment); it is done every time, since version 1.2, because it costs only a bind and keeps the flow simple. If the reconnection can't start, the app shows the data it has.
 
+## Boots after the enrollment
+
+What the app has to do at every boot once the launcher is enrolled. Steps **L** are the launcher's, for context: the app does nothing in them. Steps **A** are the app's. Order and times as traced on the EX6000 (launcher 6.60-ingenico, app 1.3 *Run at boot*); the launcher side is in [Boot and enrollment flow](launcher-boot-enrollment.md#ingenico-boot-sequence).
+
+### Normal boot
+
+**Launcher (context: the app does nothing)**
+
+- **L1 – The terminal boots.** The launcher's process starts for a broadcast (SIM change or `BOOT_COMPLETED`); the app isn't running yet.
+- **L2 – `BOOT_COMPLETED` → the launcher's `BootReceiver`.** Its `MainActivity` hasn't run in this boot, so the launcher initializes: services, MQTT push, workers.
+- **L3 – Startup update:** the launcher loads the configuration, then downloads and installs the updated apps. The app isn't open, so an update of the app itself doesn't interrupt its work.
+- **L4 – Startup update over** (`Startup update completed`): the gate opens.
+- **L5 – 5 s later, *Run at boot* starts the app.** If it was updated in L3, the new version starts.
+
+**App (what it has to do)**
+
+- **A1 – Read the launcher's `FLAG_STOPPED` before `connect()`:** `getPackageManager().getApplicationInfo(launcher, 0).flags & ApplicationInfo.FLAG_STOPPED`. Expected: false.
+- **A2 – `headwindMDM.connect()`.**
+- **A3 – In `onHeadwindMDMConnected()`, check that the agent is running:** `getMdmAgentError() != ERROR_NOT_CONFIGURED` and the launcher wasn't stopped (A1). Expected: running → **don't call `startLauncher()`**.
+- **A4 – Call `awaitStartupUpdate()`.** Expected: it answers at once that the startup update is over; no download or install events.
+- **A5 – Wait for `onReady()`:** it arrives at once with `STARTUP_READY`. Handle `STARTUP_TIMEOUT` and `STARTUP_NO_MDM` the same way: they all mean "start working".
+- **A6 – `disconnect()` + `connect()`.** Not needed here (the data read in A3 is already from after the enrollment), but doing it every time costs only a bind and keeps the flow the same as at the first boot.
+- **A7 – Go on with the app's workflow.**
+
+On the EX6000, L2 → L5 took about 8 s: a 2 s startup update, then the 5 s pause.
+
+### Variants
+
+**A. No network at boot.** In L3 the configuration request is retried (6 times, every 10 s). If it still fails, the launcher ends the startup update (`Startup update failed: network error`) and keeps the configuration of the previous boot; the app updates wait for the next boot. L4 and L5 still happen: **for the app, A1–A7 don't change**.
+
+**B. Long startup update** (many apps, slow downloads). The gate opens at the end, or after the **3 min** timeout: an install already running gets 20 s more to finish, the updates not started yet wait for the next boot. Then L5: **for the app, A1–A7 don't change**.
+
+**C. The user opens the app during the startup update,** before L5. The only case in which the app waits at the gate:
+- A1–A3 as above (launcher running, no `startLauncher()`);
+- **A4:** `awaitStartupUpdate()` answers that the startup update is running → the app shows its wait screen and receives the progress events (`onAppDownloading`, `onAppInstalling`, `onDownloadProgress`);
+- if L3 installs a new version of the app, **the app is killed**; the launcher starts the new version, which starts again from A1 and finds the gate open;
+- otherwise **A5:** `onReady()` arrives at L4, when the startup update is over;
+- L5 then brings the same screen back to the front (`singleTask`), with no effect.
+
+**D. Launcher force-stopped** (*Force stop*, `am force-stop`, a firmware cleaner). A stopped launcher **doesn't receive `BOOT_COMPLETED`**: **L2–L5 don't happen**, so no startup update and no *Run at boot*. The app doesn't start by itself; the user opens it:
+- **A1:** `FLAG_STOPPED` is **true**;
+- **A2:** `connect()`, which takes the launcher out of the stopped state;
+- **A3:** the agent is configured but was stopped → **call `HeadwindMDM.startLauncher()`**;
+- the launcher comes to the front and runs its startup update (L3–L4) while the app is behind it (`onStop()`); calling `awaitStartupUpdate()` already in `onStop()`, as this app does, gives the progress events;
+- at the end, L5 brings the app back → **A4** finds the gate open → **A5** `onReady()` → **A6** `disconnect()` + `connect()` → **A7**.
+
+This is the case only A1 solves: with `ERROR_NOT_CONFIGURED` alone, the app would wait at the gate until the 3 min timeout, with no startup update.
+
+**E. Later in the day,** when the user reopens the app or the app restarts: A1–A3 as above, A4 answers at once (the "over" state lasts for the whole boot), and the launcher doesn't install or remove apps until the next boot.
+
 ## Doing the same in your app
 
 1. **Manifest:** `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`, `ACCESS_FINE_LOCATION` (network list; the Ingenico firmware grants it at install); `<queries>` for `com.hmdm.launcher` and `com.hmdm.launcher.ingenico`; the launch activity `singleTask` (the launcher's *Run at boot* then brings back the existing screen, with its state).
 2. **Gradle:** `targetSdk 28`, and in `lint` disable `ExpiredTargetSdkVersion` and `OldTargetApi`; the hmdm library 1.2.3 or later (`HeadwindMDM.startLauncher()`).
 3. **At start:** read the stopped state, connect, decide in `onHeadwindMDMConnected()` (section [1](#1-is-the-agent-running)).
 4. **Not running:** WiFi if there is no validated network ([2](#2-wifi)), start the launcher ([3](#3-starting-the-launcher)), then the startup gate; the app *Run at boot* in the configuration, so the launcher brings it back.
-5. **Running:** the startup gate only ([4](#4-startup-gate)).
+5. **Running:** the startup gate only ([4](#4-startup-gate)); this is the path of every boot after the enrollment ([Boots after the enrollment](#boots-after-the-enrollment)).
 6. **Don't** request a configuration sync before the launcher is enrolled (it fails: no device ID yet) or during the startup update (it would start a second update in parallel).
 7. **Never log** the WiFi or MDM passwords.
 
