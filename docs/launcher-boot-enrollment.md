@@ -83,7 +83,38 @@ On Ingenico terminals `com.ingenico.dxmobile` is device owner, not the launcher.
 
 **First enrollment.** `startEnrollmentIfNeeded()` does nothing (the launcher isn't device owner). A launcher just installed and never run is in the Android **stopped state** and doesn't even receive `BOOT_COMPLETED`. Enrollment starts only when something opens `MainActivity`: the user, or an app through the hmdm library (`HeadwindMDM.startLauncher()`, see [Starting the MDM launcher](start-launcher.md)). `MainActivity` then reads `init.json` from the APK assets and enrolls as on Sunmi, without becoming home.
 
-**Every boot after enrollment.** Nothing opens `MainActivity`, so `BootReceiver` does the work (next section).
+**Every boot after enrollment.** Nothing opens `MainActivity`, so `BootReceiver` does the work (see [`BootReceiver`](#bootreceiver)), and the launcher starts the apps marked **Run at boot** when its startup update is over.
+
+### Ingenico boot sequence
+
+Captured on the EX6000 (launcher 6.60-ingenico, Ingenico Sample App 1.3 marked *Run at boot*, no app to install in that boot):
+
+| Time | Event | Log |
+|---|---|---|
+| 15:19:02.240 | The launcher's process starts for a SIM broadcast, before `BOOT_COMPLETED`; `App.onCreate()` reads the serial number through USDK | `am_proc_start … SimChangedReceiver`, `Reading the serial number through USDK` |
+| 15:19:10.934 | `BOOT_COMPLETED`: `MainActivity` hasn't run, so `BootReceiver` initializes | `Headwind MDM wasn't started since boot, start initializing services` |
+| 15:19:11.034 | Push service (MQTT) started | `Starting Push service from BootReceiver` |
+| 15:19:11.051 | **Startup update** begins: configuration request | `updateConfig(): set configInitializing=true` |
+| 15:19:12.520 | Configuration loaded; apps checked (nothing to install) | `Configuration updated` |
+| 15:19:12.937 | **Startup update over**: the startup gate opens | `Startup update completed` |
+| 15:19:18.034 | **Run at boot**, after the 5 s pause | `Run at boot: started com.mooney.mdm.ingenico` |
+| 15:19:18.682 | The sample app connects and finds the gate open | `Startup gate: open, startup update over`, `Operative` |
+
+The sample app was started only by the launcher's *Run at boot* intent (`am_create_activity` / `am_proc_start … activity`): the Ingenico home app and DxMobile didn't open it.
+
+**The order is always the same.** `BootAutorun.start()` is called only at the end of `StartupUpdate.complete()`, once per boot (the state is saved with `BOOT_COUNT`, so a configuration push or a launcher restart later in the boot doesn't start the apps again). The startup update ends:
+
+| End | Log | Run at boot |
+|---|---|---|
+| Configuration loaded, app installs and removals done | `Startup update completed` | Right after |
+| 3 min timeout from the first request of the boot, no app update running | `Startup update timed out` | Right after; the remaining app updates wait for the next boot |
+| Timeout during an app download or install | `Startup update timed out, remaining app updates deferred to the next boot`, or after a 20 s grace `…the current app update did not end` | When that app update ends, or after the grace |
+| Configuration request failed (server or network error after the retries), launcher enrolled | `Startup update failed: …` | Right after, with the configuration of the previous boot |
+| Not enrolled yet (no configuration ever loaded) | `Startup update kept open: configuration not loaded before the enrollment` | Not yet: with the first update after the enrollment |
+
+So on Ingenico the sequence is: startup update (configuration, downloads, installs) → gate open → 5 s → *Run at boot* starts the apps. An app started by *Run at boot* finds the gate open; an app waits on the gate during the sync only if something else opened it before the startup update ended (the user, for example). See [Startup sync](startup-sync.md) and [Ingenico Sample App](ingenico-sample-app.md).
+
+In the same boot the terminal started with its clock about 2 minutes ahead (15:21), and the time daemon set it back at 15:19:02 (`TIME_SET`): the case described in [The start time check](#the-start-time-check). It was harmless here, because the saved start time was about 22 hours old.
 
 ## `BootReceiver`
 
@@ -128,7 +159,7 @@ Keep **Run default launcher** off for kiosk terminals.
 ## Checking on a device
 
 ```
-adb logcat -v time | grep -E "BOOT_RECEIVER|already started, ignoring|wasn't started since boot|starting MainActivity to enroll|Setup wizard is running|user_setup_complete changed|Set Headwind MDM as default launcher|Forcing configuration update"
+adb logcat -v time | grep -E "BOOT_RECEIVER|already started, ignoring|wasn't started since boot|starting MainActivity to enroll|Setup wizard is running|user_setup_complete changed|Set Headwind MDM as default launcher|Forcing configuration update|Startup update|Run at boot"
 adb shell cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN
 adb shell dpm list-owners
 ```
