@@ -77,6 +77,44 @@ adb shell pm list packages | grep -i setupwizard
 2. `MainActivity.onCreate()` saves the start time (`setAppStartTime()`), runs `Initializer.init()` and starts the services; `startLauncher()` shows the saved configuration and starts the configuration update in the background (the startup update, see [Startup sync](startup-sync.md)); in kiosk mode `showContent()` → `startKiosk()` starts the kiosk app.
 3. `BOOT_COMPLETED` arrives: `BootReceiver` sees the server URL is set and the start time is later than the boot time, logs `Headwind MDM is already started, ignoring BootReceiver` and does nothing.
 
+### Sunmi boot sequence
+
+Captured on the Sunmi terminal LE15P5CS00214 (launcher 6.60-master, kiosk mode, Sunmi Sample App as the kiosk app, no app marked *Run at boot*, no app to install in that boot):
+
+| Time | Event | Log |
+|---|---|---|
+| 15:30:07.3 | Boot screen: Android shows `com.android.settings/.FallbackHome` while the user is still locked | `wm_set_resumed_activity … FallbackHome` |
+| 15:30:10.8–11.3 | User unlocked | `am_user_state_changed`, `uc_finish_user_unlocked` |
+| 15:30:13.724 | **The launcher's process starts as the home app** | `am_proc_start … com.hmdm.launcher,top-activity,{…MainActivity}` |
+| 15:30:15.012 | `Initializer.init()` | `MDM Launcher 6.60-master started` |
+| 15:30:15.111 | **Startup update** begins; orientation locked during the update | `Updating configuration in startLauncher()`, `Lock orientation: …` |
+| 15:30:16.034 | Lock task mode started first, then the kiosk app (6.60) | `Lock task mode started in 810 ms, starting com.mooney.mdm.sunmi` |
+| 15:30:16.291 | First configuration request fails: WiFi isn't up yet | `Failed to update config: network error` |
+| 15:30:16.426 | The kiosk app's process starts, in front in lock task mode | `am_proc_start … com.mooney.mdm.sunmi,next-top-activity` |
+| 15:30:16.891 | The kiosk app connects and **waits at the startup gate** | `Startup gate: the agent is updating apps, waiting` |
+| 15:30:24.036 | Network up | `Network is available, resuming flow` |
+| 15:30:26.301 | Configuration request repeated | `updateConfig(): set configInitializing=true` |
+| 15:30:28.366 | Configuration loaded; apps checked (nothing to install) | `Configuration updated` |
+| 15:30:29.291 | `BOOT_COMPLETED` reaches the launcher, 15.5 s after `MainActivity` started | `appStartTime=…, bootTime=…`, `Headwind MDM is already started, ignoring BootReceiver` |
+| 15:30:30.613 | `showContent()` after the update: the kiosk app isn't started again (6.57) | `Kiosk mode running, launcher in background: com.mooney.mdm.sunmi not restarted` |
+| 15:30:30.709 | **Startup update over**: the gate opens | `Startup update completed` |
+| 15:30:30.751 | The kiosk app starts its work | `Startup gate: open, startup update over`, `Operative` |
+
+One start of the kiosk app, no `Invalid task`, no recreation of `MainActivity`. The kiosk app waited 14 s at the gate, mostly for the WiFi.
+
+### Sunmi and Ingenico compared
+
+| | Sunmi (home app, kiosk mode) | Ingenico (not home) |
+|---|---|---|
+| Who starts the launcher at boot | Android, as the home app, about 3 s after the user unlock | A broadcast (SIM change, `BOOT_COMPLETED`) |
+| Who runs the startup update | `MainActivity.startLauncher()` | `BootReceiver` → `Initializer.startServicesAndLoadConfig()` |
+| `BootReceiver` | Ignores the broadcast (`already started`) | Does the work |
+| Who starts the app | Kiosk mode (`startKiosk()`), right after lock task mode | *Run at boot*, 5 s after the startup update |
+| When the app starts | **Before** the startup update ends | **After** the startup update |
+| Startup gate | The app **waits** until the update is over | Already open when the app connects |
+
+So on Sunmi the kiosk app must wait at the gate (`awaitStartupUpdate()`) before it lets the user work: the launcher may still install apps, the kiosk app included, and installing an app kills it. See [Startup sync](startup-sync.md).
+
 ## Ingenico
 
 On Ingenico terminals `com.ingenico.dxmobile` is device owner, not the launcher. So the launcher can't set itself as home, and the `ingenico` flavor removes `HOME` from `MainActivity` (`src/ingenico/AndroidManifest.xml`) to avoid the chooser. Kiosk mode of the configuration is ignored.
