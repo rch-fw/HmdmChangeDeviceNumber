@@ -137,6 +137,10 @@ For a kiosk app that opens the WiFi settings in kiosk mode (which intent, what t
 must allow, the launcher restarting the kiosk app at every configuration push up to 6.56 and the
 fix in 6.57–6.60) see [WiFi settings from a kiosk app on Sunmi terminals](docs/kiosk-wifi-settings.md).
 
+For how the launcher enrolls a terminal, becomes the home app and starts at every boot (Sunmi and
+Ingenico, `BootReceiver`, `init.json`, configuration sync triggers) see
+[Boot and enrollment flow of the MDM launcher](docs/launcher-boot-enrollment.md).
+
 # Sample app
 
 Shows how to create a demo app that uses 2 libraries:
