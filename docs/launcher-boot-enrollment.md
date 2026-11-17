@@ -48,6 +48,29 @@ The Sunmi firmware (CRP) makes the launcher device owner and copies `init.json` 
 
 If the terminal reboots before step 4, `BootReceiver` calls `startEnrollmentIfNeeded()` again at the next boot (no server URL yet).
 
+### The setup wizard
+
+The setup wizard is the series of screens Android shows at the first boot after a factory reset, before the home screen: language, WiFi, date and time, terms, Google account. It is also called OOBE (out-of-box experience).
+
+While it runs, the wizard is registered as a home app with a high priority, so it is what Android shows at boot. When the user completes it, it sets `Settings.Secure.user_setup_complete` (and `Settings.Global.device_provisioned`) to 1 and disables its own components, and the normal home apps take over.
+
+On the Sunmi terminal tested (LE15P5CS00214) there are two wizard packages, `com.google.android.setupwizard` and `com.tinno.setupwizard` (Tinno is the hardware maker of this model). After the setup both have their components disabled, and the home app candidates are `com.android.launcher3`, the Headwind launcher and `com.android.settings/.FallbackHome`.
+
+With Sunmi CRP the firmware makes the launcher device owner at the first boot, while the wizard is still on screen. Opening `MainActivity` at that moment would cover or interrupt the wizard, and `setDefaultLauncherEarly()` would make the launcher the home app in the middle of the setup. So `startEnrollmentIfNeeded()` checks `user_setup_complete`:
+
+- 0: it schedules `SetupCompleteWorker` with a content URI trigger on the setting, and does nothing else (log: `Setup wizard is running, enrollment will start when it completes`);
+- 1: it starts `MainActivity` (log: `Device owner set by the firmware, starting MainActivity to enroll the device`).
+
+When the user completes the wizard, the setting changes, the job scheduler runs the worker (log: `SetupCompleteWorker: user_setup_complete changed`), and the worker calls `startEnrollmentIfNeeded()`, which now starts `MainActivity`. If the setup is still not complete, the worker is scheduled again. Commit `a05db82`; the enrollment loop test script (`7d38530`, factory reset → wizard → enrollment → kiosk app) tests the whole sequence.
+
+Check on a device:
+
+```
+adb shell settings get secure user_setup_complete
+adb shell settings get global device_provisioned
+adb shell pm list packages | grep -i setupwizard
+```
+
 ## Sunmi: every boot after enrollment
 
 1. Android opens the home app, `MainActivity`, usually before `BOOT_COMPLETED` is delivered.
@@ -105,7 +128,7 @@ Keep **Run default launcher** off for kiosk terminals.
 ## Checking on a device
 
 ```
-adb logcat -v time | grep -E "BOOT_RECEIVER|already started, ignoring|wasn't started since boot|starting MainActivity to enroll|Setup wizard is running|Set Headwind MDM as default launcher|Forcing configuration update"
+adb logcat -v time | grep -E "BOOT_RECEIVER|already started, ignoring|wasn't started since boot|starting MainActivity to enroll|Setup wizard is running|user_setup_complete changed|Set Headwind MDM as default launcher|Forcing configuration update"
 adb shell cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN
 adb shell dpm list-owners
 ```
