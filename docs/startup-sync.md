@@ -68,6 +68,33 @@ Launcher 6.51 and earlier started these apps only from the launcher's main scree
 
 Both flags are only about starting apps. When apps are *installed* is decided by **Install app updates only at device startup** (see [Configuration option](#configuration-option)).
 
+### Kiosk app and *Run at boot*
+
+The **kiosk app** is started **before** the startup update, the apps marked ***Run at boot*** **after** it:
+
+| | Kiosk app (kiosk mode on) | Apps marked *Run at boot* |
+|---|---|---|
+| When it starts | Right away, when the startup update begins: lock task mode first, then the app | When the startup update is over (1 s after, or 5 s if the launcher's main screen is open) |
+| During the startup update | Already running: it **must wait at the gate** (`awaitStartupUpdate()`), because an install can kill it, and a launcher self-update stops kiosk mode for a few seconds | Not open yet: an install can't interrupt it, and it finds the gate already open |
+| If it is killed | Kiosk mode starts it again | Started once per boot |
+
+"Over" means any end of the startup update: apps updated or nothing to install, configuration not loaded (the saved one is used), or the 3-minute timeout. The one exception is a launcher not enrolled yet: its startup update stays open until the enrollment (see [How it works](#how-it-works)).
+
+Traced on the Sunmi LE15P5CS00214 (kiosk mode, the sample app as the kiosk app), in the boot where the launcher updated itself from 6.61 to 6.62:
+
+| Time | Event |
+|---|---|
+| 10:01:25.0 | Startup update begins |
+| 10:01:25.9 | Lock task mode, kiosk app started |
+| 10:01:26.7 | App: `Startup gate: the agent is updating apps, waiting` |
+| 10:01:38.9–41.5 | The app follows the download and install of `com.hmdm.launcher` 6.62 |
+| 10:01:45.4 | Android stops the launcher to replace it: kiosk mode ends; the app's process survives |
+| 10:01:54.7 | `Launcher updated to 6.62, restarting it` |
+| 10:01:55.4 | Lock task mode again, kiosk app back in front |
+| 10:01:56.8 | `Startup update completed`; app: `Startup gate: open`, `Operative` |
+
+On the Ingenico EX6000 (no kiosk mode, the sample app marked *Run at boot*, launcher 6.62) the app started 1.07 s after `Startup update completed`.
+
 ## Requirements
 
 - Headwind MDM library (`hmdm`) **1.2.0** or later: `app/libs/hmdm-1.2.3.aar` in this project. Use **1.2.1** or later with the Ingenico launcher (`com.hmdm.launcher.ingenico`): 1.2.0 connects only to `com.hmdm.launcher`, so with the Ingenico launcher the gate opens with `STARTUP_NO_MDM`. Use **1.2.2** or later if the app sets an API key: 1.2.1 and earlier crash when the launcher has no configuration yet (just installed, not enrolled).
