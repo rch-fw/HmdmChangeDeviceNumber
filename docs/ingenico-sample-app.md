@@ -190,30 +190,29 @@ The app reconnects (`disconnect()` + `connect()`) and shows the server and the d
 
 ## First boot (enrollment)
 
-What the app has to do the first time, on a terminal where the launcher and the app have just been installed (see [Deployment](#deployment)). Steps **L** are the launcher's, for context: the app does nothing in them. Steps **A** are the app's. Times as traced on the EX6000, 2026-11-18 (launcher 6.61-ingenico, app 1.3, no saved network, the configuration installs `com.hmdm.pager`).
+What the mooney app has to do the first time, on a terminal where the launcher and the app have just been installed (see [Deployment](#deployment)).
 
-Before the first start the launcher is in the **stopped state** (installed, never run): it receives no boot broadcast and doesn't enroll by itself. Nothing starts the app either: the user opens it.
-
-1. **A1 – The user opens the app** from the Ingenico home screen (08:15:06.9).
-2. **A2 – Read the launcher's `FLAG_STOPPED` before `connect()`:** `getPackageManager().getApplicationInfo(launcher, 0).flags & ApplicationInfo.FLAG_STOPPED`. Expected: **set** (it must be read now, because `connect()` clears it).
-3. **A3 – `headwindMDM.connect()`.** It binds the launcher's plugin service: the launcher's process starts in the background (08:15:07.5, it reads the serial number through USDK), but it doesn't enroll.
-4. **A4 – In `onHeadwindMDMConnected()`, check that the agent is running:** `getMdmAgentError()` returns `ERROR_NOT_CONFIGURED` (and the launcher was stopped) → *not running*: `MDM agent not running (not enrolled): initializing the device` (08:15:07.6). The app has to start the launcher.
-5. **A5 – Check the network** (`NET_CAPABILITY_VALIDATED`). If there is no network with internet, show **Configure WiFi** (`No network: configure WiFi`).
-6. **A6 – The user chooses the network and types the password; the app adds it** (`WifiManager.addNetwork()` + `enableNetwork()`) and waits for internet: `network RUT200_FA74 added` (08:15:38.6), `connected to RUT200_FA74 with internet` (08:15:42.4). Skipped if A5 found a network.
-7. **A7 – `headwindMDM.startLauncher()`**: the launcher's `MainActivity` opens in front of the app (08:15:42.5). It is opened with the launcher intent, so it stays in front instead of handing over to the Ingenico home screen.
-8. **L1 – Enrollment:** the launcher reads `init.json` from its APK assets (server, group, device ID from the serial number, 08:15:42.7) and starts the startup update (`Updating configuration in startLauncher()`, 08:15:43.3).
-9. **A8 – In `onStop()`** (the launcher's screen covers the app, 08:15:43.8), call **`awaitStartupUpdate()`**: `Startup gate: the agent is updating apps, waiting`. Called only now, so the library's 3.5 min safety timeout doesn't run during the WiFi setup. The app stays behind the launcher and doesn't bring itself to the front.
-10. **L2 – Startup update:** configuration loaded (`Configuration updated`, 08:15:45.0), then the apps downloaded and installed through USDK (`com.hmdm.pager`, 08:15:45.6–52.4). Before the enrollment the 3 min timeout isn't started (`Startup update awaited before the enrollment, timeout not started`); it starts with the first configuration request.
-11. **A9 – Follow the progress** with the listener: `onAppDownloading`, `onDownloadProgress`, `onAppInstalling` (`Startup gate: downloading com.hmdm.pager`, `installing com.hmdm.pager`). No transactions: the app isn't in front yet anyway.
-12. **L3 – Startup update over** (`Startup update completed`, 08:15:52.9): the gate opens.
-13. **A10 – `onReady(STARTUP_READY)`** (08:15:52.9): `Startup gate: open, startup update over`. Handle `STARTUP_TIMEOUT` and `STARTUP_NO_MDM` the same way.
-14. **A11 – `disconnect()` + `connect()`**: **needed here**, because the data read in A3 is from before the enrollment. `Operative`, `Device number: 25CJKU643883` (08:15:52.96).
-15. **L4 – 5 s later, *Run at boot* brings the app back to the front** (`Run at boot: started com.mooney.mdm.ingenico`, 08:15:57.9): the same instance, with its state. The pause is 5 s, also with launcher 6.62, because the launcher's main screen is open. The app must be *Run at boot* in the configuration, otherwise the launcher's screen stays in front and the user opens the app again from the home screen (it finds itself ready).
-16. **A12 – Go on with the app's workflow.**
-
-From the WiFi **Connect** to operative: 10.5 s; to the app back in front: 15.5 s. No reboot is needed: from the next boot on the launcher is enrolled and the app follows [Boots after the enrollment](#boots-after-the-enrollment).
-
-If the app itself is updated by this startup update, Android kills it during the install (it is open, behind the launcher); *Run at boot* then starts the new version, which finds the agent running and the gate open.
+1. There is no network.
+2. The user opens the mooney app. The first time only the user can start it: it is in the stopped state and the launcher doesn't know it yet.
+3. The app scans the QR code with the network data.
+4. It configures the network (`addNetwork()` + `enableNetwork()`).
+5. `testconnlite()` checks that there is internet (validated network).
+6. It reads the launcher's `FLAG_STOPPED`, then calls `headwindMDM.connect()`. The flag must be read before `connect()`, because the bind clears it.
+7. `onHeadwindMDMConnected()`: if `ERROR_NOT_CONFIGURED`, or the launcher was stopped → `HeadwindMDM.startLauncher(ctx)`. The second case is a launcher that is enrolled but was force-stopped.
+8. The MDM client comes to the front and does all the work:
+   - it reads `init.json` from the APK assets;
+   - it uses the serial number as the device ID;
+   - it loads the configuration;
+   - it runs the startup update: it downloads and installs the apps. If the configuration has a new version of the mooney app, it is installed now, and Android kills the mooney app here, while it is behind the launcher.
+9. The mooney app is covered by the launcher: it receives `onStop()` and waits behind it.
+10. The startup update ends (`Startup update completed`). 5 seconds later the launcher starts the apps marked *Run at boot*: the mooney app (`singleTask`) comes back to the front with its state → `onResume()`.
+    - The mooney app must be *Run at boot* in the configuration. Without it, the launcher stays in front and the user has to open the app again.
+    - If the app was killed in step 8, the launcher starts the new version (*Run after install* / *Run at boot*). The new version starts again from step 6, finds the agent enrolled and running, and skips step 7.
+11. It calls `awaitStartupUpdate()`: it answers at once that the startup update is over, because the gate is already open.
+12. No download or install events: the updates were already done in step 8. The events arrive only if `awaitStartupUpdate()` is called while the startup update is running; the Ingenico Sample App already calls it in `onStop()`, behind the launcher.
+13. `onReady(STARTUP_READY)` arrives at once. The app can no longer be killed here: that happens in step 8, before the app comes back to the front.
+14. After `onReady()`: `disconnect()` + `connect()`, to read the agent's data again (server, device ID). The data read at the first connection was from before the enrollment.
+15. The app goes on with its workflow.
 
 ## Boots after the enrollment
 
