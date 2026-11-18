@@ -21,7 +21,7 @@ It is much simpler than the Ingenico app, because on Sunmi terminals:
 
 ## Deployment
 
-On the MDM server, add `com.mooney.mdm.sunmi` to the terminal's configuration with its APK and either set it as the **kiosk app** (kiosk mode on: the launcher starts it at every boot right away, before the startup update ends) or mark it **Run at boot** (kiosk mode off: the launcher opens it at every boot once the startup update is over). The launcher installs it with the first startup update. See [Boots after the enrollment](#boots-after-the-enrollment).
+On the MDM server, add `com.mooney.mdm.sunmi` to the terminal's configuration with its APK and either set it as the **kiosk app** (kiosk mode on: the launcher starts it at every boot right away, before the startup update ends) or mark it **Run at boot** (kiosk mode off: the launcher opens it at every boot once the startup update is over). The launcher installs it with the first startup update. See [At every boot](#at-every-boot).
 
 ## What the app does
 
@@ -43,9 +43,9 @@ When the launcher is not enrolled the app doesn't wait at the gate: with launche
 
 The operative screen has the same **Get device number**, **Change device number** and **Sync configuration** buttons as the Ingenico app (no **Configure WiFi**).
 
-## Boots after the enrollment
+## At every boot
 
-What the app has to do at every boot once the launcher is enrolled. Steps **L** are the launcher's, for context: the app does nothing in them. Steps **A** are the app's. Order and times as traced on LE15P5CS00214 (launcher 6.60-master, kiosk mode, this app as the kiosk app, no app to install in that boot); the launcher side is in [Boot and enrollment flow](launcher-boot-enrollment.md#sunmi-boot-sequence).
+What the app has to do at every boot. **The app's steps are the same at every boot, the enrollment boot included**: on Sunmi the app never enrolls the launcher (the provisioning does it, see [Enrollment boot](#enrollment-boot)), so there is no first-boot flow for the app. Only the launcher's steps differ. Steps **L** are the launcher's, for context: the app does nothing in them. Steps **A** are the app's. Order and times as traced on LE15P5CS00214 (launcher 6.60-master, kiosk mode, this app as the kiosk app, no app to install in that boot); the launcher side is in [Boot and enrollment flow](launcher-boot-enrollment.md#sunmi-boot-sequence).
 
 The app is started either as the **kiosk app** (kiosk mode on, the usual case) or by ***Run at boot*** (kiosk mode off). The difference for the app is only when it starts: before the startup update ends (kiosk) or after it (*Run at boot*). The app's steps are the same.
 
@@ -72,6 +72,18 @@ In the traced boot the app connected at 15:30:16.9 and the gate opened at 15:30:
 ### Normal boot, kiosk mode off (*Run at boot*)
 
 As on Ingenico: the launcher runs the whole startup update first, and **5 s after its end** starts the apps marked *Run at boot* (on Sunmi the launcher's main screen is open, as the HOME app, so the 1 s pause of launcher 6.62 on Ingenico doesn't apply). A1–A2 as above, **A3** answers at once that the startup update is over (no events), **A4** `onReady(STARTUP_READY)` arrives at once, **A5**.
+
+### Enrollment boot
+
+The boot in which the provisioning has just made the launcher device owner. The launcher's steps differ from L1–L5 (details in [Boot and enrollment flow](launcher-boot-enrollment.md#sunmi-first-enrollment)):
+
+- **L1 – The firmware makes the launcher device owner**; once the setup wizard is complete, the launcher opens its own `MainActivity` and becomes the HOME app.
+- **L2 – Enrollment:** the launcher reads `init.json` (server, configuration, group), chooses the device ID (serial number) and starts the first configuration update: the startup update.
+- **L3 – Startup update:** the configuration is loaded and the apps are installed, this app included.
+- **L4 – Kiosk start:** in kiosk mode the launcher starts the kiosk app, this app, once it's installed.
+- **L5 – Startup update over** (`Startup update completed`): the gate opens.
+
+The app's steps are **A1–A5, unchanged**. The only difference is when the app starts: after its own installation, so at A3 the startup update may still be running (other apps being installed: `onWaiting()` and the progress events) or already over (A3 answers at once). Both cases are already handled by A3–A4. Still no reconnection in A5: the app starts after the enrollment, so the data read in A2 is already the enrolled launcher's.
 
 ### Variants
 
