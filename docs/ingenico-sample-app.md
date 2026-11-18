@@ -188,6 +188,33 @@ Details: [Startup sync](startup-sync.md).
 
 The app reconnects (`disconnect()` + `connect()`) and shows the server and the device number when `onHeadwindMDMConnected()` arrives. The reconnection is needed when the app started the launcher (the data read at the first connection was from before the enrollment); it is done every time, since version 1.2, because it costs only a bind and keeps the flow simple. If the reconnection can't start, the app shows the data it has.
 
+## First boot (enrollment)
+
+What the app has to do the first time, on a terminal where the launcher and the app have just been installed (see [Deployment](#deployment)). Steps **L** are the launcher's, for context: the app does nothing in them. Steps **A** are the app's. Times as traced on the EX6000, 2026-11-18 (launcher 6.61-ingenico, app 1.3, no saved network, the configuration installs `com.hmdm.pager`).
+
+Before the first start the launcher is in the **stopped state** (installed, never run): it receives no boot broadcast and doesn't enroll by itself. Nothing starts the app either: the user opens it.
+
+1. **A1 – The user opens the app** from the Ingenico home screen (08:15:06.9).
+2. **A2 – Read the launcher's `FLAG_STOPPED` before `connect()`:** `getPackageManager().getApplicationInfo(launcher, 0).flags & ApplicationInfo.FLAG_STOPPED`. Expected: **set** (it must be read now, because `connect()` clears it).
+3. **A3 – `headwindMDM.connect()`.** It binds the launcher's plugin service: the launcher's process starts in the background (08:15:07.5, it reads the serial number through USDK), but it doesn't enroll.
+4. **A4 – In `onHeadwindMDMConnected()`, check that the agent is running:** `getMdmAgentError()` returns `ERROR_NOT_CONFIGURED` (and the launcher was stopped) → *not running*: `MDM agent not running (not enrolled): initializing the device` (08:15:07.6). The app has to start the launcher.
+5. **A5 – Check the network** (`NET_CAPABILITY_VALIDATED`). If there is no network with internet, show **Configure WiFi** (`No network: configure WiFi`).
+6. **A6 – The user chooses the network and types the password; the app adds it** (`WifiManager.addNetwork()` + `enableNetwork()`) and waits for internet: `network RUT200_FA74 added` (08:15:38.6), `connected to RUT200_FA74 with internet` (08:15:42.4). Skipped if A5 found a network.
+7. **A7 – `headwindMDM.startLauncher()`**: the launcher's `MainActivity` opens in front of the app (08:15:42.5). It is opened with the launcher intent, so it stays in front instead of handing over to the Ingenico home screen.
+8. **L1 – Enrollment:** the launcher reads `init.json` from its APK assets (server, group, device ID from the serial number, 08:15:42.7) and starts the startup update (`Updating configuration in startLauncher()`, 08:15:43.3).
+9. **A8 – In `onStop()`** (the launcher's screen covers the app, 08:15:43.8), call **`awaitStartupUpdate()`**: `Startup gate: the agent is updating apps, waiting`. Called only now, so the library's 3.5 min safety timeout doesn't run during the WiFi setup. The app stays behind the launcher and doesn't bring itself to the front.
+10. **L2 – Startup update:** configuration loaded (`Configuration updated`, 08:15:45.0), then the apps downloaded and installed through USDK (`com.hmdm.pager`, 08:15:45.6–52.4). Before the enrollment the 3 min timeout isn't started (`Startup update awaited before the enrollment, timeout not started`); it starts with the first configuration request.
+11. **A9 – Follow the progress** with the listener: `onAppDownloading`, `onDownloadProgress`, `onAppInstalling` (`Startup gate: downloading com.hmdm.pager`, `installing com.hmdm.pager`). No transactions: the app isn't in front yet anyway.
+12. **L3 – Startup update over** (`Startup update completed`, 08:15:52.9): the gate opens.
+13. **A10 – `onReady(STARTUP_READY)`** (08:15:52.9): `Startup gate: open, startup update over`. Handle `STARTUP_TIMEOUT` and `STARTUP_NO_MDM` the same way.
+14. **A11 – `disconnect()` + `connect()`**: **needed here**, because the data read in A3 is from before the enrollment. `Operative`, `Device number: 25CJKU643883` (08:15:52.96).
+15. **L4 – 5 s later, *Run at boot* brings the app back to the front** (`Run at boot: started com.mooney.mdm.ingenico`, 08:15:57.9): the same instance, with its state. The pause is 5 s, also with launcher 6.62, because the launcher's main screen is open. The app must be *Run at boot* in the configuration, otherwise the launcher's screen stays in front and the user opens the app again from the home screen (it finds itself ready).
+16. **A12 – Go on with the app's workflow.**
+
+From the WiFi **Connect** to operative: 10.5 s; to the app back in front: 15.5 s. No reboot is needed: from the next boot on the launcher is enrolled and the app follows [Boots after the enrollment](#boots-after-the-enrollment).
+
+If the app itself is updated by this startup update, Android kills it during the install (it is open, behind the launcher); *Run at boot* then starts the new version, which finds the agent running and the gate open.
+
 ## Boots after the enrollment
 
 What the app has to do at every boot once the launcher is enrolled. Steps **L** are the launcher's, for context: the app does nothing in them. Steps **A** are the app's. Order and times as traced on the EX6000 (launcher 6.60-ingenico, app 1.3 *Run at boot*); the launcher side is in [Boot and enrollment flow](launcher-boot-enrollment.md#ingenico-boot-sequence).
