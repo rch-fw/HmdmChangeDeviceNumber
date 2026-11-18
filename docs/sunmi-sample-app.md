@@ -61,17 +61,16 @@ The app is started either as the **kiosk app** (kiosk mode on, the usual case) o
 
 **App (what it has to do)**
 
-- **A1 – `headwindMDM.connect()`.**
-- **A2 – In `onHeadwindMDMConnected()`, check that the agent is enrolled:** `getMdmAgentError() != ERROR_NOT_CONFIGURED`. Expected: enrolled. No stopped check and no `startLauncher()`: the launcher is the HOME app, Android has started it (L1).
-- **A3 – Call `awaitStartupUpdate()`.** Expected: **the startup update is running** (`onWaiting()`): show a wait screen, no transactions. The listener receives the progress: `onAppRemoving`, `onAppDownloading`, `onDownloadProgress`, `onAppInstalling`.
-- **A4 – Wait for `onReady()`:** it arrives at L5 with `STARTUP_READY`. Handle `STARTUP_TIMEOUT` and `STARTUP_NO_MDM` the same way: they all mean "start working".
-- **A5 – Go on with the app's workflow.** No reconnection is needed: the app didn't start the launcher, so the data read in A2 is already from after the enrollment.
+- **A1 – `headwindMDM.connect()`.** No enrollment check, no stopped check and no `startLauncher()`: the provisioning has enrolled the launcher, and as the HOME app Android starts it at every boot (L1).
+- **A2 – Call `awaitStartupUpdate()`.** Expected: **the startup update is running** (`onWaiting()`): show a wait screen, no transactions. The listener receives the progress: `onAppRemoving`, `onAppDownloading`, `onDownloadProgress`, `onAppInstalling`.
+- **A3 – Wait for `onReady()`:** it arrives at L5 with `STARTUP_READY`. Handle `STARTUP_TIMEOUT` and `STARTUP_NO_MDM` the same way: they all mean "start working".
+- **A4 – Go on with the app's workflow.** No reconnection is needed: the app didn't start the launcher, so the data read at the connection (A1) is already from after the enrollment.
 
 In the traced boot the app connected at 15:30:16.9 and the gate opened at 15:30:30.7: **14 s at the gate**, mostly waiting for the WiFi (the first configuration request failed, the second one at 15:30:26 succeeded).
 
 ### Normal boot, kiosk mode off (*Run at boot*)
 
-As on Ingenico: the launcher runs the whole startup update first, and **5 s after its end** starts the apps marked *Run at boot* (on Sunmi the launcher's main screen is open, as the HOME app, so the 1 s pause of launcher 6.62 on Ingenico doesn't apply). A1–A2 as above, **A3** answers at once that the startup update is over (no events), **A4** `onReady(STARTUP_READY)` arrives at once, **A5**.
+As on Ingenico: the launcher runs the whole startup update first, and **5 s after its end** starts the apps marked *Run at boot* (on Sunmi the launcher's main screen is open, as the HOME app, so the 1 s pause of launcher 6.62 on Ingenico doesn't apply). A1 as above, **A2** answers at once that the startup update is over (no events), **A3** `onReady(STARTUP_READY)` arrives at once, **A4**.
 
 ### Enrollment boot
 
@@ -83,19 +82,17 @@ The boot in which the provisioning has just made the launcher device owner. The 
 - **L4 – Kiosk start:** in kiosk mode the launcher starts the kiosk app, this app, once it's installed.
 - **L5 – Startup update over** (`Startup update completed`): the gate opens.
 
-The app's steps are **A1–A5, unchanged**. The only difference is when the app starts: after its own installation, so at A3 the startup update may still be running (other apps being installed: `onWaiting()` and the progress events) or already over (A3 answers at once). Both cases are already handled by A3–A4. Still no reconnection in A5: the app starts after the enrollment, so the data read in A2 is already the enrolled launcher's.
+The app's steps are **A1–A4, unchanged**. The only difference is when the app starts: after its own installation, so at A2 the startup update may still be running (other apps being installed: `onWaiting()` and the progress events) or already over (A2 answers at once). Both cases are already handled by A2–A3. Still no reconnection in A4: the app starts after the enrollment, so the data read at the connection (A1) is already the enrolled launcher's.
 
 ### Variants
 
-**A. No network at boot.** The configuration request is retried (6 times, every 10 s); in the traced boot the launcher also waited for the network before retrying. If it still fails, the launcher ends the startup update (`Startup update failed: network error`) with the configuration of the previous boot, and the app updates wait for the next boot. **For the app, A1–A5 don't change**: the gate opens at the end, `onReady()` arrives.
+**A. No network at boot.** The configuration request is retried (6 times, every 10 s); in the traced boot the launcher also waited for the network before retrying. If it still fails, the launcher ends the startup update (`Startup update failed: network error`) with the configuration of the previous boot, and the app updates wait for the next boot. **For the app, A1–A4 don't change**: the gate opens at the end, `onReady()` arrives.
 
-**B. Long startup update** (many apps, slow downloads). The app stays in A3 with the progress events. The gate opens at the end, or after the **3 min** timeout (an install already running gets 20 s more; the updates not started yet wait for the next boot). The library has its own safety timeout of 3.5 min, after which `onReady(STARTUP_TIMEOUT)` arrives anyway.
+**B. Long startup update** (many apps, slow downloads). The app stays in A2 with the progress events. The gate opens at the end, or after the **3 min** timeout (an install already running gets 20 s more; the updates not started yet wait for the next boot). The library has its own safety timeout of 3.5 min, after which `onReady(STARTUP_TIMEOUT)` arrives anyway.
 
-**C. The startup update installs a new version of the app.** In kiosk mode the app is already running (L3), so **Android kills it** during the install, while it waits at the gate. Lock task mode brings the launcher back in front, and the launcher starts the kiosk app again: the new version starts from A1. If other apps are still being updated it waits in A3, otherwise A3 answers at once. Nothing the app has to handle, except that the work done before `onReady()` is lost: that's why the app must not start transactions before A4. With kiosk mode off, the app isn't open during the update (*Run at boot* comes after), so it isn't killed.
+**C. The startup update installs a new version of the app.** In kiosk mode the app is already running (L3), so **Android kills it** during the install, while it waits at the gate. Lock task mode brings the launcher back in front, and the launcher starts the kiosk app again: the new version starts from A1. If other apps are still being updated it waits in A2, otherwise A2 answers at once. Nothing the app has to handle, except that the work done before `onReady()` is lost: that's why the app must not start transactions before A3. With kiosk mode off, the app isn't open during the update (*Run at boot* comes after), so it isn't killed.
 
-**D. Launcher not enrolled** (provisioning not done or failed). A2 finds `ERROR_NOT_CONFIGURED`: the app **doesn't wait at the gate** (with launcher 6.54 or later it stays open until the enrollment) and shows "MDM agent not enrolled". Only the provisioning procedure can enroll the launcher (see [Boot and enrollment flow](launcher-boot-enrollment.md#sunmi-first-enrollment)).
-
-**E. Later in the day**, when the user reopens the app or the app restarts (also after a crash: in kiosk mode the launcher starts it again within a fraction of a second): A1–A2 as above, A3 answers at once (the "over" state lasts for the whole boot), and the launcher doesn't install or remove apps until the next boot.
+**D. Later in the day**, when the user reopens the app or the app restarts (also after a crash: in kiosk mode the launcher starts it again within a fraction of a second): A1 as above, A2 answers at once (the "over" state lasts for the whole boot), and the launcher doesn't install or remove apps until the next boot.
 
 ### Differences from the Ingenico app
 
