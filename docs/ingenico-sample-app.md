@@ -200,7 +200,7 @@ What the app has to do at every boot once the launcher is enrolled. Steps **L** 
 - **L2 – `BOOT_COMPLETED` → the launcher's `BootReceiver`.** Its `MainActivity` hasn't run in this boot, so the launcher initializes: services, MQTT push, workers.
 - **L3 – Startup update:** the launcher loads the configuration, then downloads and installs the updated apps. The app isn't open, so an update of the app itself doesn't interrupt its work.
 - **L4 – Startup update over** (`Startup update completed`): the gate opens.
-- **L5 – 5 s later, *Run at boot* starts the app.** If it was updated in L3, the new version starts.
+- **L5 – 1 s later, *Run at boot* starts the app** (5 s with launcher 6.61 and earlier). If it was updated in L3, the new version starts.
 
 **App (what it has to do)**
 
@@ -212,7 +212,7 @@ What the app has to do at every boot once the launcher is enrolled. Steps **L** 
 - **A6 – `disconnect()` + `connect()`.** Not needed here (the data read in A3 is already from after the enrollment), but doing it every time costs only a bind and keeps the flow the same as at the first boot.
 - **A7 – Go on with the app's workflow.**
 
-On the EX6000, L2 → L5 took about 8 s: a 2 s startup update, then the 5 s pause.
+On the EX6000 with launcher 6.60, L2 → L5 took about 8 s: a 2 s startup update, then the 5 s pause. With launcher 6.62 the pause is 1 s (`Startup update completed` 09:46:41.033 → `Run at boot` 09:46:42.103).
 
 ### Variants
 
@@ -287,7 +287,7 @@ Run on the EX6000 (development terminal), 2026-11-13, launcher 6.55, app 1.2, no
 | 09:34:43.46 | `Device number: 25CJKU643883`: the reconnection when ready (`disconnect()` + `connect()`, then `onHeadwindMDMConnected()`) took 23 ms and read the data of the enrolled launcher |
 | 09:34:48.4 | Launcher: `Run at boot: started com.mooney.mdm.ingenico`: the app's screen is back in front (the same instance, with its state) |
 
-14 s from **Connect** to operative, 19 s to the app back in front, no reboot. Between the two the launcher's screen is in front: the launcher starts the *Run at boot* apps about 5 s after the startup update ends.
+14 s from **Connect** to operative, 19 s to the app back in front, no reboot. Between the two the launcher's screen is in front: the launcher starts the *Run at boot* apps about 5 s after the startup update ends. The 5 s pause stays with launcher 6.62 here, because the launcher's main screen is open (the app opened it for the enrollment): it may still be opening the Ingenico home, which would cover the app.
 
 Earlier runs, same day:
 

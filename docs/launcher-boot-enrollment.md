@@ -109,7 +109,7 @@ One start of the kiosk app, no `Invalid task`, no recreation of `MainActivity`. 
 | Who starts the launcher at boot | Android, as the home app, about 3 s after the user unlock | A broadcast (SIM change, `BOOT_COMPLETED`) |
 | Who runs the startup update | `MainActivity.startLauncher()` | `BootReceiver` → `Initializer.startServicesAndLoadConfig()` |
 | `BootReceiver` | Ignores the broadcast (`already started`) | Does the work |
-| Who starts the app | Kiosk mode (`startKiosk()`), right after lock task mode | *Run at boot*, 5 s after the startup update |
+| Who starts the app | Kiosk mode (`startKiosk()`), right after lock task mode | *Run at boot*, 1 s after the startup update (launcher 6.62 or later) |
 | When the app starts | **Before** the startup update ends | **After** the startup update |
 | Startup gate | The app **waits** until the update is over | Already open when the app connects |
 
@@ -135,7 +135,7 @@ Captured on the EX6000 (launcher 6.60-ingenico, Ingenico Sample App 1.3 marked *
 | 15:19:11.051 | **Startup update** begins: configuration request | `updateConfig(): set configInitializing=true` |
 | 15:19:12.520 | Configuration loaded; apps checked (nothing to install) | `Configuration updated` |
 | 15:19:12.937 | **Startup update over**: the startup gate opens | `Startup update completed` |
-| 15:19:18.034 | **Run at boot**, after the 5 s pause | `Run at boot: started com.mooney.mdm.ingenico` |
+| 15:19:18.034 | **Run at boot**, after the 5 s pause of launcher 6.60 (1 s from 6.62: 1.07 s on the same terminal with 6.62) | `Run at boot: started com.mooney.mdm.ingenico` |
 | 15:19:18.682 | The sample app connects and finds the gate open | `Startup gate: open, startup update over`, `Operative` |
 
 The sample app was started only by the launcher's *Run at boot* intent (`am_create_activity` / `am_proc_start … activity`): the Ingenico home app and DxMobile didn't open it.
@@ -150,7 +150,7 @@ The sample app was started only by the launcher's *Run at boot* intent (`am_crea
 | Configuration request failed (server or network error after the retries), launcher enrolled | `Startup update failed: …` | Right after, with the configuration of the previous boot |
 | Not enrolled yet (no configuration ever loaded) | `Startup update kept open: configuration not loaded before the enrollment` | Not yet: with the first update after the enrollment |
 
-So on Ingenico the sequence is: startup update (configuration, downloads, installs) → gate open → 5 s → *Run at boot* starts the apps. An app started by *Run at boot* finds the gate open; an app waits on the gate during the sync only if something else opened it before the startup update ended (the user, for example). See [Startup sync](startup-sync.md) and [Ingenico Sample App](ingenico-sample-app.md).
+So on Ingenico the sequence is: startup update (configuration, downloads, installs) → gate open → 1 s → *Run at boot* starts the apps (5 s with launcher 6.61 and earlier; see [Startup sync](startup-sync.md) for the pause). An app started by *Run at boot* finds the gate open; an app waits on the gate during the sync only if something else opened it before the startup update ended (the user, for example). See [Startup sync](startup-sync.md) and [Ingenico Sample App](ingenico-sample-app.md).
 
 In the same boot the terminal started with its clock about 2 minutes ahead (15:21), and the time daemon set it back at 15:19:02 (`TIME_SET`): the case described in [The start time check](#the-start-time-check). It was harmless here, because the saved start time was about 22 hours old.
 

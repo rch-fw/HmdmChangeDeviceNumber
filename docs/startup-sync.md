@@ -57,7 +57,7 @@ The application flags of the configuration work as follows (launcher **6.52** or
   - the 3-minute timeout.
 - Once per boot: configuration updates later in the day don't start the apps again, and neither does a launcher restart (crash, self-update) during the same boot.
 - Also at the end of the first configuration after enrollment, so an app already installed before the launcher is started too.
-- The apps are started 5 seconds apart. Starting an app which is already running only brings it to the front.
+- The first app is started 1 second after the end of the startup update when the launcher's main screen isn't open (Ingenico boots), 5 seconds when it is open (it may still be finishing its own flow, for example opening the Ingenico home after the enrollment, which would cover the app). Then the apps are started 5 seconds apart. Launcher 6.61 and earlier always waited 5 seconds before the first app too. Starting an app which is already running only brings it to the front.
 - Started at this point, the app is never killed by an install afterwards, and when it calls `awaitStartupUpdate` the gate is already open.
 - It doesn't depend on the launcher's main screen. The launcher starts the apps from the background, which Android 10+ allows because the launcher holds the "draw over other apps" permission (`SYSTEM_ALERT_WINDOW`). Without it, the launcher writes `Run at boot: no "draw over other apps" permission` in the device log, and Android may refuse to start the apps.
 - If the launcher's main screen is open (the launcher is the HOME app) and the configuration doesn't keep the apps in the foreground, the launcher comes back to the front after starting them, as in the standard Headwind MDM.

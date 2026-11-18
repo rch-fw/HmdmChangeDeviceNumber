@@ -71,7 +71,7 @@ In the traced boot the app connected at 15:30:16.9 and the gate opened at 15:30:
 
 ### Normal boot, kiosk mode off (*Run at boot*)
 
-As on Ingenico: the launcher runs the whole startup update first, and **5 s after its end** starts the apps marked *Run at boot*. A1–A2 as above, **A3** answers at once that the startup update is over (no events), **A4** `onReady(STARTUP_READY)` arrives at once, **A5**.
+As on Ingenico: the launcher runs the whole startup update first, and **5 s after its end** starts the apps marked *Run at boot* (on Sunmi the launcher's main screen is open, as the HOME app, so the 1 s pause of launcher 6.62 on Ingenico doesn't apply). A1–A2 as above, **A3** answers at once that the startup update is over (no events), **A4** `onReady(STARTUP_READY)` arrives at once, **A5**.
 
 ### Variants
 
