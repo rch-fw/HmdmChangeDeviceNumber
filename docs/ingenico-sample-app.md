@@ -355,10 +355,43 @@ No reboot, as long as the update runs at boot or from the app's sync:
 - **If the configuration has a new version of the MDM launcher**, it installs it and restarts by itself (`Launcher updated to …, restarting it`). The app's startup gate survives the restart: the hmdm library asks again when it reconnects.
 - **Only the other updates during the day** (server push, the periodic check) leave app installs and removals for the next boot, with *Install app updates only at device startup* checked (the default). Then reboot (`sendPush("reboot", null)`, the web panel, or by hand), or call `forceConfigUpdate()` from the app.
 
+## The Home key and the Mooney payment app
+
+On the EX6000 the Mooney payment app (`it.mooney.srvingenico` 1.0.1, *Run at boot*) looks locked in front, but it isn't kiosk mode: Android's lock task mode is off (`mLockTaskModeState=NONE`), and the MDM launcher, not being device owner on Ingenico, can't lock an app anyway. The app does it with an Ingenico firmware setting:
+
+| What | Value | Effect |
+|---|---|---|
+| `settings get global disable_home` | `1` | The Home key does nothing |
+| The app's window flags | `FULLSCREEN`, `KEEP_SCREEN_ON` | No status bar while the app is in front, screen always on |
+| `settings get global disable_statusbar` | `0` | The status bar itself isn't disabled |
+
+The lock is partial: **Recents** still works, and **Back** from the recent apps screen goes to the Ingenico home screen.
+
+**Who sets it.** The payment app, when it starts. Traced on 2026-11-20 (launcher 6.62, no network at boot), reading `disable_home` every 0.5 s through the boot, after setting it to 0:
+
+| Time | `disable_home` | Event |
+|---|---|---|
+| 07:34:14 → 07:35:46.9 | 0 | Boot, launcher, startup update: neither the firmware nor the MDM launcher changes it |
+| 07:35:45.7 | 0 | `Run at boot: started it.mooney.srvingenico` |
+| 07:35:46.2 | 0 | Payment app: `onCreate` |
+| 07:35:47.1–47.2 | | Payment app: `onStart`, `onResume`, in front |
+| 07:35:47.5 | **1** | Home key disabled |
+
+The app doesn't log the call; it holds the Ingenico permission to change system settings (`titan.extperm.SETTING_SET`), so it is presumably the USDK system settings API. The app's **MENU** unlocks the key: after `Premuto bottone MENU` the setting went back to 0. It is a persistent setting: it stays as it is across reboots, until the app changes it again. The MDM launcher never reads or changes it.
+
+To check on a terminal:
+
+```
+adb shell settings get global disable_home
+adb shell dumpsys activity activities | grep -E "mResumedActivity|mLockTaskModeState"
+```
+
 ## Troubleshooting
 
 | Symptom | Cause, what to do |
 |---|---|
+| The Home key doesn't work | `disable_home` = 1, set by the Mooney payment app when it starts (see [The Home key and the Mooney payment app](#the-home-key-and-the-mooney-payment-app)); its MENU unlocks it. |
+| The *Run at boot* app starts about 1 min after the boot | No network at boot: the launcher retries the configuration request (6 times, every 10 s) before ending the startup update, and *Run at boot* waits for its end. With no network at all each attempt fails at once (`Failed to update config: network error`). Check that a saved network is in range: the network added by the sample app is removed when the sample app is uninstalled. |
 | `FAILED to add the network … (refused by Android)` | A network with that name was saved in the settings or by another app: forget it there and retry. Or the app doesn't target SDK 28 (`addOrUpdateNetwork not allowed` in the log). |
 | "Not connected yet … Check the password" | Wrong password, network out of range, or no internet behind the access point (the app waits for validated internet). |
 | Empty network list | Location turned off, or no location permission: type the network name. Android also limits how often apps scan: retry **Scan** later. |
