@@ -12,8 +12,8 @@ android {
         // targetSdk 28: Android 10 lets only apps targeting SDK 28 or lower add a WiFi network
         // (WifiManager.addNetwork(), see docs/wifi-setup.md). Not for the Play Store.
         targetSdk 28
-        versionCode 8
-        versionName '1.7'
+        versionCode 9
+        versionName '1.8'
     }
 
     lint {
