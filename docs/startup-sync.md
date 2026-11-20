@@ -8,7 +8,7 @@ On the Ingenico terminals the launcher is **not in kiosk mode** and is not the h
 
 When the launcher installs a new version of an app, or removes it, Android kills the app's process. If that happens in the middle of a payment, the payment is lost.
 
-So the launcher installs and removes apps **only during the startup update**: the first configuration update after the device boots. Configuration updates later in the day (push, the periodic check, the launcher's own screens) apply everything else (settings, policies, files, remote commands) but leave app installs and removals for the next boot. The exception is a sync requested by an app through the plugin API (`forceConfigUpdate()`, launcher 6.55 or later): it installs and removes apps right away, see [Sync requested by an app](#sync-requested-by-an-app). This is on by default and can be turned off per configuration (see [Configuration option](#configuration-option)).
+So the launcher installs and removes apps **only during the startup update**: the first configuration update after the device boots. Configuration updates later in the day (push, the periodic check, the launcher's own screens) apply everything else (settings, policies, files, remote commands) but leave app installs and removals for the next boot. The exception is a sync requested by an app through the plugin API (`forceConfigUpdate()`, launcher 6.55 or later): it installs and removes apps right away, see [Sync requested by an app](#sync-requested-by-an-app). With a scheduled time window, the apps are also installed inside the window, for the terminals which are never switched off (launcher 6.66 or later, see [With a scheduled time window](#with-a-scheduled-time-window)). This is on by default and can be turned off per configuration (see [Configuration option](#configuration-option)).
 
 At boot the app may already be running while the launcher installs updates: the user can open it from the home screen before the startup update is over. The app therefore asks the launcher whether the startup update is over and waits until it is: the **startup gate**. While it waits it is idle, so if the launcher replaces it, nothing is lost.
 
@@ -103,7 +103,7 @@ Launcher **6.65** or later. On the Ingenico terminals kiosk mode isn't supported
 | When | What the launcher does with the main app |
 |---|---|
 | `BOOT_COMPLETED` | Starts it right away, before the startup update (`Run at boot: started main app … early, before the startup update`). The app is on screen during the startup update, so it **must wait at the gate** (`awaitStartupUpdate()`). |
-| The startup update installs a new version of it | Android kills it during the install. The launcher starts the new version right after the install (`Run at boot: main app … updated, started again right after the install`), whether or not the app is *Run after install*; it waits at the gate while the other apps are updated. |
+| The launcher installs a new version of it | Android kills it during the install. The launcher starts the new version right after the install (`Run at boot: main app … updated, started again right after the install`), whether or not the app is *Run after install*. In the startup update it waits at the gate while the other apps are updated. Launcher 6.66 or later does the same for the other installs done in the background: in the [scheduled time window](#with-a-scheduled-time-window) and in a [sync requested by an app](#sync-requested-by-an-app); 6.65 only in the startup update. |
 | The startup update ends | Starts it again, after the *Run at boot* apps (1 s after the end, then 5 s apart), so that it ends up in front (`Run at boot: started main app …`). If it is already in front, a `singleTask` activity receives `onPause()` → `onNewIntent()` → `onResume()`, not `onStart()`. |
 
 - It doesn't need *Run at boot*. If it has it, it is started once at the end, as the main app.
@@ -244,22 +244,52 @@ The server sends it to the device in the configuration JSON as `appUpdateAtStart
 
 With either value, the startup update and the startup gate work the same way: the gate is still needed, because the startup update installs apps right after boot.
 
+### With a scheduled time window
+
+Two kinds of terminals: the ones switched off every evening and on every morning get their updates at the next boot, within a day; the ones **never switched off** would never get them. For those, **Schedule app update** / **App update time** sets a time window, for example at night, in which the apps are also installed. Launcher **6.66** or later:
+
+| Install app updates only at device startup | Schedule app update | When apps are installed and removed |
+|---|---|---|
+| Checked | Off | Startup update, and a sync requested by an app. |
+| Checked | **On** | **Startup update, at any time** (the window doesn't apply to it); **any configuration update inside the window** (the launcher's check when the window opens, a push, the periodic check); a sync requested by an app. Outside the window the other updates leave the apps for the next boot or the next window. |
+| Unchecked | On | Only inside the window, the startup update included, as in the standard Headwind MDM. |
+| Unchecked | Off | Right after any configuration update, as in the standard Headwind MDM. |
+
+- **The window opening:** the launcher checks every 15 minutes whether the window has opened, then loads the configuration and installs (`Running scheduled app update`, `N app update(s) in the scheduled time window, installing now`). In the test below the install started 4 minutes after the window opened.
+- **The window is checked before each app:** if it closes while apps are still being installed, the remaining ones wait for the next window or the next boot.
+- **No startup gate inside the window:** an app running at that time is killed by its own update, even in the middle of its work. Choose a window in which the terminals aren't used.
+- **The main app** (kiosk app field) killed by its own update is started again right after the install, as at boot (see [Main app](#main-app-the-kiosk-app-field-without-kiosk-mode)). The other apps start again only if they are *Run after install*.
+- Outside the window the log says `N app update(s) deferred to the next boot or the scheduled time window`.
+- The window is checked against the terminal's clock.
+- With launcher 6.65 or earlier and both options on, the startup update installed only if the boot was inside the window, and the updates inside the window were deferred to the next boot: a terminal never switched off got no updates.
+
+Tested on the Ingenico EX6000, 2026-11-20, launcher 6.66, the Ingenico Sample App in the kiosk app field:
+
+| Time | Event |
+|---|---|
+| 14:39 | Boot outside the window (01:00–02:59): the startup update installs 1.7, which starts 0.06 s after its install |
+| 14:43:42, 14:44:34 | 1.8 uploaded and the window moved to 14:50–17:00: each push logs `1 app update(s) deferred to the next boot or the scheduled time window` |
+| 14:54:17.352 | `Running scheduled app update` |
+| 14:54:18.059 | `1 app update(s) in the scheduled time window, installing now` |
+| 14:54:20.7 → 26.1 | 1.8 installed through the USDK; Android stops the app at 14:54:22.7 and the Ingenico home is in front |
+| 14:54:26.153 | 1.8 started 0.06 s after its install, `Operative` at 14:54:26.582 |
+
 ## Sync requested by an app
 
 With launcher **6.55** or later, a configuration update requested by an app through the plugin API (`HeadwindMDM.forceConfigUpdate()`, `MDMService.forceConfigUpdate(ConfigUpdateListener)`) installs and removes apps **right away**, as the startup update does, even with **Install app updates only at device startup** checked. The app asked for it at a moment it chose, so it accepts that installing an app kills it.
 
 - The launcher writes `N app update(s) requested by an app, installing now` in the device log.
 - If the startup update is still running, the apps are left to it (`left to the startup update in progress`): two updates never install at the same time. Call it after the startup gate opened.
-- The other updates (server push, the periodic check, the launcher's own screens) still leave the apps for the next boot.
-- If the configuration has a new version of the calling app, the app is killed during the sync; the launcher starts the new version if it is marked *Run after install*, otherwise the user opens it again.
+- The other updates (server push, the periodic check, the launcher's own screens) still leave the apps for the next boot, or for the [scheduled time window](#with-a-scheduled-time-window).
+- If the configuration has a new version of the calling app, the app is killed during the sync; the launcher starts the new version if it is marked *Run after install* or if it is the main app (kiosk app field, launcher 6.66 or later), otherwise the user opens it again.
 - The time window and "WiFi only" options don't apply: the request counts as a user action.
 - With launcher 6.54 or earlier, the sync doesn't install apps when the option is checked.
 
 ## Operator notes
 
 - In the configuration, app updates are released as usual (new version, action **Install**). With the default setting, devices install them **at the next boot**, not when the configuration is saved. To apply an update right away, reboot the device (from the web panel or by hand), tap **Sync configuration** in the app (launcher 6.55 or later), or uncheck **Install app updates only at device startup** in the configuration.
-- The configuration's app update time window and "WiFi only" option still apply to the startup update. If a device boots outside the window, its app updates wait for the next boot within the window.
-- The launcher writes `N app update(s) deferred to the next boot` in the device log when a configuration update during the day skips app changes, and `N app update(s) requested by an app, installing now` when a sync requested by an app installs them. A configuration update which runs while the startup update is still installing apps writes `N app update(s) left to the startup update in progress` to logcat instead (launcher 6.45 or later): those updates are installed by the startup update, not deferred.
+- The "WiFi only" option still applies to the startup update. The app update time window applies to it only with **Install app updates only at device startup** unchecked; checked, the startup update installs at any time and the window adds the installs inside it (launcher 6.66 or later, see [With a scheduled time window](#with-a-scheduled-time-window)). With launcher 6.65 or earlier, a device booting outside the window left its app updates for the next boot within the window.
+- The launcher writes `N app update(s) deferred to the next boot` in the device log when a configuration update during the day skips app changes, and `N app update(s) requested by an app, installing now` when a sync requested by an app installs them. With a scheduled time window (launcher 6.66 or later): `N app update(s) deferred to the next boot or the scheduled time window` outside it, `N app update(s) in the scheduled time window, installing now` inside it. A configuration update which runs while the startup update is still installing apps writes `N app update(s) left to the startup update in progress` to logcat instead (launcher 6.45 or later): those updates are installed by the startup update, not deferred.
 
 ## Rebooting from the app
 

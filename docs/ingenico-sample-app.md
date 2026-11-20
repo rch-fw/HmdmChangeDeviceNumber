@@ -180,7 +180,7 @@ The sample app instead comes back to the front by itself, because its configurat
 - In *not running* the app calls it only **after** starting the launcher, so the library's safety timeout (3.5 min) doesn't run during the WiFi setup.
 - The listener reports the progress: `onAppDownloading`, `onDownloadProgress`, `onAppInstalling`, `onAppRemoving`.
 - `onReady(reason)`: `STARTUP_READY` (startup update over), `STARTUP_TIMEOUT` (no answer within 3.5 min), `STARTUP_NO_MDM`. All mean "start working": the gate never blocks the app.
-- If the app is killed by its own update, the launcher starts the new version (*Run at boot* or *Run after install*); it finds the agent running and the gate opens at once.
+- If the app is killed by its own update, the launcher starts the new version (*Run at boot*, *Run after install*, or right after the install as the kiosk app); it finds the agent running and the gate opens at once.
 
 Details: [Startup sync](startup-sync.md).
 
@@ -284,7 +284,7 @@ This is variant C below made the normal case: on screen from the boot, the app b
 
 This is the case only A1 solves: with `ERROR_NOT_CONFIGURED` alone, the app would wait at the gate until the 3 min timeout, with no startup update.
 
-**E. Later in the day,** when the user reopens the app or the app restarts: A1–A3 as above, A4 answers at once (the "over" state lasts for the whole boot), and the launcher doesn't install or remove apps until the next boot.
+**E. Later in the day,** when the user reopens the app or the app restarts: A1–A3 as above, A4 answers at once (the "over" state lasts for the whole boot), and the launcher doesn't install or remove apps until the next boot, or the scheduled time window if set (launcher 6.66 or later: there the app may be killed by its own update and, as the kiosk app, is started again right after it).
 
 ## Doing the same in your app
 
@@ -373,9 +373,9 @@ So the two calls split the work: `awaitStartupUpdate()` waits for the update of 
 No reboot, as long as the update runs at boot or from the app's sync:
 
 - **The startup update** (at boot) and **a sync requested by the app** (`forceConfigUpdate()`, launcher 6.55 or later) install the apps right away.
-- **If the configuration has a new version of the app**, Android closes the app while installing it (the app doesn't have to do anything); the launcher then starts the new version (*Run at boot*, or *Run after install*), which calls `awaitStartupUpdate()` again and gets "over" at once. If the app isn't marked either way, the user opens it again.
+- **If the configuration has a new version of the app**, Android closes the app while installing it (the app doesn't have to do anything); the launcher then starts the new version (*Run at boot*, *Run after install*, or as the kiosk app right after the install: in the startup update with launcher 6.65, after every install with 6.66), which calls `awaitStartupUpdate()` again and gets "over" at once. If none applies, the user opens it again.
 - **If the configuration has a new version of the MDM launcher**, it installs it and restarts by itself (`Launcher updated to …, restarting it`). The app's startup gate survives the restart: the hmdm library asks again when it reconnects.
-- **Only the other updates during the day** (server push, the periodic check) leave app installs and removals for the next boot, with *Install app updates only at device startup* checked (the default). Then reboot (`sendPush("reboot", null)`, the web panel, or by hand), or call `forceConfigUpdate()` from the app.
+- **Only the other updates during the day** (server push, the periodic check) leave app installs and removals for the next boot, with *Install app updates only at device startup* checked (the default). With **Schedule app update** also on, they are installed in the time window too, for the terminals never switched off (launcher 6.66 or later, see [With a scheduled time window](startup-sync.md#with-a-scheduled-time-window)). Otherwise reboot (`sendPush("reboot", null)`, the web panel, or by hand), or call `forceConfigUpdate()` from the app.
 
 ## The Home key and the Mooney payment app
 
