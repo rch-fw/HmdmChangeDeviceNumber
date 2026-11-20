@@ -109,9 +109,9 @@ One start of the kiosk app, no `Invalid task`, no recreation of `MainActivity`. 
 | Who starts the launcher at boot | Android, as the home app, about 3 s after the user unlock | A broadcast (SIM change, `BOOT_COMPLETED`) |
 | Who runs the startup update | `MainActivity.startLauncher()` | `BootReceiver` → `Initializer.startServicesAndLoadConfig()` |
 | `BootReceiver` | Ignores the broadcast (`already started`) | Does the work |
-| Who starts the app | Kiosk mode (`startKiosk()`), right after lock task mode | *Run at boot*, 1 s after the startup update (launcher 6.62 or later) |
-| When the app starts | **Before** the startup update ends | **After** the startup update |
-| Startup gate | The app **waits** until the update is over | Already open when the app connects |
+| Who starts the app | Kiosk mode (`startKiosk()`), right after lock task mode | *Run at boot*, 1 s after the startup update (launcher 6.62 or later); the kiosk app field, at `BOOT_COMPLETED` (launcher 6.65 or later) |
+| When the app starts | **Before** the startup update ends | *Run at boot*: **after** the startup update; kiosk app field: **before** it ends |
+| Startup gate | The app **waits** until the update is over | *Run at boot*: already open when the app connects; kiosk app field: the app **waits** |
 
 So on Sunmi the kiosk app must wait at the gate (`awaitStartupUpdate()`) before it lets the user work: the launcher may still install apps, the kiosk app included, and installing an app kills it. See [Startup sync](startup-sync.md).
 
@@ -121,7 +121,7 @@ On Ingenico terminals `com.ingenico.dxmobile` is device owner, not the launcher.
 
 **First enrollment.** `startEnrollmentIfNeeded()` does nothing (the launcher isn't device owner). A launcher just installed and never run is in the Android **stopped state** and doesn't even receive `BOOT_COMPLETED`. Enrollment starts only when something opens `MainActivity`: the user, or an app through the hmdm library (`HeadwindMDM.startLauncher()`, see [Starting the MDM launcher](start-launcher.md)). `MainActivity` then reads `init.json` from the APK assets and enrolls as on Sunmi, without becoming home.
 
-**Every boot after enrollment.** Nothing opens `MainActivity`, so `BootReceiver` does the work (see [`BootReceiver`](#bootreceiver)), and the launcher starts the apps marked **Run at boot** when its startup update is over.
+**Every boot after enrollment.** Nothing opens `MainActivity`, so `BootReceiver` does the work (see [`BootReceiver`](#bootreceiver)), and the launcher starts the apps marked **Run at boot** when its startup update is over. The app in the configuration's kiosk app field is started right away, before the startup update, and again at its end (launcher 6.65 or later, see [Main app](startup-sync.md#main-app-the-kiosk-app-field-without-kiosk-mode)).
 
 ### Ingenico boot sequence
 

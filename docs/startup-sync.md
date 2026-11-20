@@ -2,7 +2,7 @@
 
 How an app (for example a payment app) waits for the Headwind MDM launcher to finish its app updates before it lets the user work.
 
-On the Ingenico terminals the launcher is **not in kiosk mode** and is not the home screen: the Ingenico launcher is the home screen, the user opens the apps from it, and the MDM launcher works in the background. It starts the apps marked *Run at boot* when the startup update is over (launcher 6.52 or later, see [Starting apps at boot](#starting-apps-at-boot)).
+On the Ingenico terminals the launcher is **not in kiosk mode** and is not the home screen: the Ingenico launcher is the home screen, the user opens the apps from it, and the MDM launcher works in the background. It starts the apps marked *Run at boot* when the startup update is over (launcher 6.52 or later, see [Starting apps at boot](#starting-apps-at-boot)). The app set in the configuration's **kiosk app** field is started right away at boot instead, and waits at the gate (launcher 6.65 or later, see [Main app](#main-app-the-kiosk-app-field-without-kiosk-mode)).
 
 ## Why
 
@@ -48,6 +48,7 @@ The application flags of the configuration work as follows (launcher **6.52** or
 |---|---|
 | **Run at boot** | When the startup update ends, once per boot. |
 | **Run after install** | Right after the configuration update which installs the app. |
+| **Kiosk app** field, without kiosk mode (Ingenico) | At boot, before the startup update; again right after its own install; again when the startup update ends (launcher 6.65 or later, see [Main app](#main-app-the-kiosk-app-field-without-kiosk-mode)). |
 
 **Run at boot**
 
@@ -94,6 +95,41 @@ Traced on the Sunmi LE15P5CS00214 (kiosk mode, the sample app as the kiosk app),
 | 10:01:56.8 | `Startup update completed`; app: `Startup gate: open`, `Operative` |
 
 On the Ingenico EX6000 (no kiosk mode, the sample app marked *Run at boot*, launcher 6.62) the app started 1.07 s after `Startup update completed`.
+
+### Main app: the kiosk app field without kiosk mode
+
+Launcher **6.65** or later. On the Ingenico terminals kiosk mode isn't supported (the launcher isn't device owner) and the configuration's kiosk mode flag is ignored, but the **kiosk app** field is used. The launcher handles that app, the **main app**, as close as it can to the kiosk app in kiosk mode, so that it is on screen from the boot instead of the Ingenico home staying in front for the whole startup update:
+
+| When | What the launcher does with the main app |
+|---|---|
+| `BOOT_COMPLETED` | Starts it right away, before the startup update (`Run at boot: started main app … early, before the startup update`). The app is on screen during the startup update, so it **must wait at the gate** (`awaitStartupUpdate()`). |
+| The startup update installs a new version of it | Android kills it during the install. The launcher starts the new version right after the install (`Run at boot: main app … updated, started again right after the install`), whether or not the app is *Run after install*; it waits at the gate while the other apps are updated. |
+| The startup update ends | Starts it again, after the *Run at boot* apps (1 s after the end, then 5 s apart), so that it ends up in front (`Run at boot: started main app …`). If it is already in front, a `singleTask` activity receives `onPause()` → `onNewIntent()` → `onResume()`, not `onStart()`. |
+
+- It doesn't need *Run at boot*. If it has it, it is started once at the end, as the main app.
+- **Enrollment boot:** there is no saved configuration yet, so no early start; it is started at the end of the startup update.
+- The early start reads the configuration **saved on the terminal**: a change of the field takes effect at the boot after the terminal has synced it.
+- **Field empty:** nothing is started early, and the *Run at boot* apps are started only when the startup update ends, as with launcher 6.62.
+- **Kiosk mode on** (Sunmi): nothing changes, the kiosk app is handled by kiosk mode.
+
+What is still different from kiosk mode:
+
+- The trigger is `BOOT_COMPLETED`: the Ingenico home is in front for the 5–10 s between the screen turning on and `BOOT_COMPLETED`.
+- No lock task mode: the user can leave the app (with the Home key, unless the app disables it).
+- Nothing starts it again if it crashes or is closed later.
+- While its own new version is being installed, the Ingenico home is in front (9 s with an install through the USDK, in the test below).
+
+Traced on the Ingenico EX6000, 2026-11-20, launcher 6.65, `it.mooney.srvingenico` in the kiosk app field and marked *Run at boot*, nothing to install:
+
+| Time | Event |
+|---|---|
+| 13:29:36.9 | Ingenico home in front |
+| 13:29:45.846 | `BOOT_COMPLETED` reaches the launcher's `BootReceiver` |
+| 13:29:45.911 | `Run at boot: started main app it.mooney.srvingenico early, before the startup update` |
+| 13:29:50.006 | `Startup update completed` |
+| 13:29:51.179 | `Run at boot: started main app it.mooney.srvingenico`: the same activity, through `onNewIntent()` |
+
+On the same terminal with the field empty, nothing started at `BOOT_COMPLETED`, and the app started 1.08 s after `Startup update completed` (13:32:43.165 → 13:32:44.247); the Ingenico home was in front from 13:32:32. When the startup update installed a new version of the Ingenico Sample App (1.7), the new version started 0.07 s after its install.
 
 ## Requirements
 

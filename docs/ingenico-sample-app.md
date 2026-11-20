@@ -36,13 +36,13 @@ On a terminal fresh from the factory:
 
 1. **Install** the launcher and the app (by the factory, the staging tool, or adb for tests). Neither has to be started: both are in the stopped state.
 2. **On the MDM server**, in the configuration the launcher enrolls into:
-   - add the app `com.mooney.mdm.ingenico` with its APK uploaded, and mark it **Run at boot**, so the launcher starts it at every boot once the startup update is over;
+   - add the app `com.mooney.mdm.ingenico` with its APK uploaded, and either set it as the **kiosk app** (launcher 6.65 or later; kiosk mode itself is ignored on Ingenico), so the launcher starts it at every boot right away and it waits at the startup gate, or mark it **Run at boot**, so the launcher starts it at every boot once the startup update is over (see [Main app](startup-sync.md#main-app-the-kiosk-app-field-without-kiosk-mode));
    - add the other apps the terminal needs; they are installed by the first startup update.
 3. **The user opens the app** from the home screen. Nothing else can start it the first time: the launcher doesn't know the app yet (it has no configuration), and a stopped app receives no boot broadcast.
 
-From then on the launcher starts the app at every boot (*Run at boot*), and the app waits at the startup gate until the app updates are installed.
+From then on the launcher starts the app at every boot (as the kiosk app, or *Run at boot*), and the app waits at the startup gate until the app updates are installed.
 
-> If the configuration marks another app as *Run at boot*, the launcher opens that one on top when the startup update ends. In a test on the EX6000 the configuration still had the sample app (`com.mooney.mdm.sample`), which was installed and opened over this app.
+> If the configuration marks another app as *Run at boot*, the launcher opens that one on top when the startup update ends. In a test on the EX6000 the configuration still had the sample app (`com.mooney.mdm.sample`), which was installed and opened over this app. An app set as the kiosk app is started after the *Run at boot* apps, so it stays in front.
 
 ## What the app does
 
@@ -166,8 +166,8 @@ The app starts the launcher's main activity with `HeadwindMDM.startLauncher()` (
 The app doesn't bring itself back to the front (since version 1.1):
 
 - in `onStop()` (the launcher's screen is up) it calls the startup gate and waits behind the launcher;
-- when the startup update is over, the launcher starts the apps marked **Run at boot**: the app (`singleTask`) comes back to the front with its state, and the gate is open or opens at once;
-- so the app must be **Run at boot** in the configuration the launcher enrolls into (see [Deployment](#deployment)); otherwise the launcher's screen stays in front and the user opens the app again from the home screen (it finds itself ready).
+- when the startup update is over, the launcher starts the apps marked **Run at boot**, then the kiosk app: the app (`singleTask`) comes back to the front with its state, and the gate is open or opens at once;
+- so the app must be **Run at boot** or the kiosk app in the configuration the launcher enrolls into (see [Deployment](#deployment)); otherwise the launcher's screen stays in front and the user opens the app again from the home screen (it finds itself ready).
 
 If the launcher's screen doesn't start (`onResume()` without `onStop()`), the app logs it and goes on to the startup gate.
 
@@ -205,8 +205,8 @@ What the mooney app has to do the first time, on a terminal where the launcher a
    - it loads the configuration;
    - it runs the startup update: it downloads and installs the apps. If the configuration has a new version of the mooney app, it is installed now, and Android kills the mooney app here, while it is behind the launcher.
 9. The mooney app is covered by the launcher: it receives `onStop()` and waits behind it.
-10. The startup update ends (`Startup update completed`). 5 seconds later the launcher starts the apps marked *Run at boot*: the mooney app (`singleTask`) comes back to the front with its state → `onResume()`.
-    - The mooney app must be *Run at boot* in the configuration. Without it, the launcher stays in front and the user has to open the app again.
+10. The startup update ends (`Startup update completed`). 5 seconds later the launcher starts the apps marked *Run at boot*, then the kiosk app: the mooney app (`singleTask`) comes back to the front with its state → `onResume()`.
+    - The mooney app must be *Run at boot* or the kiosk app in the configuration. Without it, the launcher stays in front and the user has to open the app again.
     - If the app was killed in step 8, the launcher starts the new version (*Run after install* / *Run at boot*). The new version starts again from step 6, finds the agent enrolled and running, and skips step 7.
 11. It calls `awaitStartupUpdate()`: it answers at once that the startup update is over, because the gate is already open.
 12. No download or install events: the updates were already done in step 8. The events arrive only if `awaitStartupUpdate()` is called while the startup update is running; the Ingenico Sample App already calls it in `onStop()`, behind the launcher.
@@ -239,6 +239,28 @@ What the app has to do at every boot once the launcher is enrolled. Steps **L** 
 - **A7 – Go on with the app's workflow.**
 
 On the EX6000 with launcher 6.60, L2 → L5 took about 8 s: a 2 s startup update, then the 5 s pause. With launcher 6.62 the pause is 1 s (`Startup update completed` 09:46:41.033 → `Run at boot` 09:46:42.103).
+
+### Normal boot, app set as the kiosk app
+
+With the app in the configuration's **kiosk app** field (launcher 6.65 or later) the launcher starts it at `BOOT_COMPLETED`, as kiosk mode does with the Sunmi app; see [Main app](startup-sync.md#main-app-the-kiosk-app-field-without-kiosk-mode).
+
+**Launcher (context: the app does nothing)**
+
+- **L1 – The terminal boots.** As above.
+- **L2 – `BOOT_COMPLETED` → the launcher's `BootReceiver`** starts the app right away (0.07 s on the EX6000), then initializes.
+- **L3 – Startup update, with the app in front.** If it installs a new version of the app, Android kills the app and the launcher starts the new version right after the install.
+- **L4 – Startup update over:** the gate opens.
+- **L5 – 1 s later, the launcher starts the app again:** it is already in front, so the same activity (`singleTask`) receives `onPause()` → `onNewIntent()` → `onResume()`.
+
+**App (what it has to do)**
+
+- **A1–A3** as above: the agent is running, no `startLauncher()`.
+- **A4 – `awaitStartupUpdate()`** normally answers that the startup update is running: the app shows its wait screen and receives the progress events.
+- If L3 installs a new version of the app, the app is killed; the new version starts from A1 and waits at the gate for the rest of the startup update.
+- **A5 – `onReady()`** arrives at L4.
+- **A6–A7** as above. L5 brings the same screen to the front again: the app must not start its flow again in `onNewIntent()` / `onResume()`.
+
+This is variant C below made the normal case: on screen from the boot, the app behaves like the Sunmi kiosk app.
 
 ### Variants
 
@@ -339,7 +361,7 @@ Expected (tested): `MDM agent running`, `Startup gate: open, startup update over
 
 No, the launcher doesn't wait for the app. `awaitStartupUpdate()` doesn't start anything: it only asks the launcher whether its startup update is over, and holds the app until it is.
 
-- **At boot** the launcher starts the startup update by itself, as soon as it has the network: the app may not be running yet (the launcher starts it with *Run at boot* only at the end), and the other apps of the configuration are updated too. The app can't be in a payment during it, because it waits at the gate; so the launcher doesn't need the app's permission.
+- **At boot** the launcher starts the startup update by itself, as soon as it has the network: the app may not be running yet (the launcher starts it with *Run at boot* only at the end, or right away if it is the kiosk app), and the other apps of the configuration are updated too. The app can't be in a payment during it, because it waits at the gate; so the launcher doesn't need the app's permission.
 - **During the day** the app chooses the moment with **`forceConfigUpdate()`** (the **Sync configuration** button): with launcher **6.55** or later it loads the configuration and installs and removes the apps right away, even with *Install app updates only at device startup* checked. Call it when the app can be closed, after the gate opened. See [Startup sync](startup-sync.md#sync-requested-by-an-app).
 
 - **When the launcher isn't running** (new device not enrolled, or force-stopped, so it missed the boot), what starts the update is starting the launcher's main screen: `HeadwindMDM.startLauncher()`, as in the [flow](#what-the-app-does). Its main screen enrolls it and runs the startup update. Calling `awaitStartupUpdate()` right after it, as this app does, is enough: the gate waits for that update and opens when the apps are installed. There is no need for `awaitStartupUpdate()` to start the update too.
@@ -399,6 +421,8 @@ adb shell dumpsys activity activities | grep -E "mResumedActivity|mLockTaskModeS
 | Ready, but the apps weren't installed | Launcher older than 6.54 (the startup update ended before the enrollment), or no network when the launcher loaded its configuration: reboot, the next startup update installs them. |
 | "MDM agent not enrolled" on the ready screen | The launcher couldn't enroll (no network, enrollment settings missing in its APK): check the launcher's log (`HeadwindMDM`). |
 | Another app opens on top when the startup update ends | That app is marked *Run at boot* in the configuration. |
+| The Ingenico home stays in front for the whole startup update | The app isn't the kiosk app (launcher 6.65 or later): *Run at boot* starts it only at the end. Even as the kiosk app, the home is in front for the 5–10 s before `BOOT_COMPLETED`. |
+| The kiosk app field was changed, but the boot still starts the old app early (or none) | The early start reads the configuration saved on the terminal: the change takes effect at the boot after the terminal has synced it. |
 | After the WiFi setup the launcher's screen stays in front, the app doesn't come back | The app isn't marked *Run at boot* in the configuration (or the launcher lacks "draw over other apps", see [Startup sync](startup-sync.md#starting-apps-at-boot)). Open the app from the home screen: it is ready. |
 | **Change device number** fails with HTTP 401/403 | Wrong credentials, or the MDM user lacks the `rename_device` permission. |
 | **Sync configuration**: "no answer from the agent within 90 s" | The update failed (network or server error): the launcher reports only successful updates. |
